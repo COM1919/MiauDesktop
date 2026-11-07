@@ -1,0 +1,255 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>18.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{1d5ee998-f612-45cf-af26-e0e3fae8e577}</ProjectGuid>
+    <RootNamespace>MiauDesktop</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <!-- 两个程序（MiauDesktop / MiauSettings）统一输出到 srv\bin\<Platform>\<Configuration> -->
+  <PropertyGroup>
+    <OutDir>$(MSBuildThisFileDirectory)..\bin\$(Platform)\$(Configuration)\</OutDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+    <Manifest>
+      <EnableSegmentHeap>true</EnableSegmentHeap>
+    </Manifest>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+    <Manifest>
+      <EnableSegmentHeap>true</EnableSegmentHeap>
+    </Manifest>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <AdditionalIncludeDirectories>.\ImGui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+    <Manifest>
+      <EnableSegmentHeap>true</EnableSegmentHeap>
+    </Manifest>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <AdditionalIncludeDirectories>.\ImGui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+    <Manifest>
+      <EnableSegmentHeap>true</EnableSegmentHeap>
+    </Manifest>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="AppSettings\Appsettings.cpp" />
+    <ClCompile Include="Component.cpp" />
+    <ClCompile Include="Config\Config.cpp" />
+    <ClCompile Include="Settings\SettingsServer.cpp" />
+    <ClCompile Include="GuiBase\GuiAnimation.cpp" />
+    <ClCompile Include="GuiBase\GUIBase.cpp" />
+    <ClCompile Include="GuiBase\GuiCard.cpp" />
+    <ClCompile Include="GuiBase\GuiCharts.cpp" />
+    <ClCompile Include="GuiBase\GuiControls.cpp" />
+    <ClCompile Include="GuiBase\GuiInput.cpp" />
+    <ClCompile Include="GuiBase\GuiNavigation.cpp" />
+    <ClCompile Include="GuiBase\GuiOverlay.cpp" />
+    <ClCompile Include="GuiBase\GuiTheme.cpp" />
+    <ClCompile Include="ImGui\ImAnim\im_anim.cpp" />
+    <ClCompile Include="ImGui\ImAnim\im_anim_demo.cpp" />
+    <ClCompile Include="ImGui\ImAnim\im_anim_doc.cpp" />
+    <ClCompile Include="ImGui\ImAnim\im_anim_usecase.cpp" />
+    <ClCompile Include="ImGui\imgui.cpp" />
+    <ClCompile Include="ImGui\ImGuiMD\imgui_md.cpp" />
+    <ClCompile Include="ImGui\ImGuiMD\md4c.c" />
+    <ClCompile Include="ImGui\ImGuiToggle\imgui_toggle.cpp" />
+    <ClCompile Include="ImGui\ImGuiToggle\imgui_toggle_palette.cpp" />
+    <ClCompile Include="ImGui\ImGuiToggle\imgui_toggle_presets.cpp" />
+    <ClCompile Include="ImGui\ImGuiToggle\imgui_toggle_renderer.cpp" />
+    <ClCompile Include="ImGui\imgui_demo.cpp" />
+    <ClCompile Include="ImGui\imgui_draw.cpp" />
+    <ClCompile Include="ImGui\imgui_impl_dx11.cpp" />
+    <ClCompile Include="ImGui\imgui_impl_win32.cpp" />
+    <ClCompile Include="ImGui\imgui_stdlib.cpp" />
+    <ClCompile Include="ImGui\imgui_tables.cpp" />
+    <ClCompile Include="ImGui\imgui_widgets.cpp" />
+    <ClCompile Include="ImGui\implot.cpp" />
+    <ClCompile Include="ImGui\implot3d.cpp" />
+    <ClCompile Include="ImGui\implot3d_items.cpp" />
+    <ClCompile Include="ImGui\implot3d_meshes.cpp" />
+    <ClCompile Include="ImGui\implot_items.cpp" />
+    <ClCompile Include="MainGUI.cpp" />
+    <ClCompile Include="Stb\stb_vorbis.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="AppSettings\Anim.h" />
+    <ClInclude Include="AppSettings\AppSettings.h" />
+    <ClInclude Include="Settings\SettingsServer.h" />
+    <ClInclude Include="Component.h" />
+    <ClInclude Include="Components\DebugDemo.h" />
+    <ClInclude Include="Components\MusicDisplay.h" />
+    <ClInclude Include="Components\PerformanceMonitor.h" />
+    <ClInclude Include="Components\ProcessManager.h" />
+    <ClInclude Include="Config\Config.h" />
+    <ClInclude Include="Framework.h" />
+    <ClInclude Include="GuiBase\GuiBase.h" />
+    <ClInclude Include="ImGui\Icons\fa.h" />
+    <ClInclude Include="ImGui\Icons\IconsFontAwesome6.h" />
+    <ClInclude Include="ImGui\ImAnim\im_anim.h" />
+    <ClInclude Include="ImGui\imconfig.h" />
+    <ClInclude Include="ImGui\imgui.h" />
+    <ClInclude Include="ImGui\ImGuiMD\imgui_md.h" />
+    <ClInclude Include="ImGui\ImGuiMD\md4c.h" />
+    <ClInclude Include="ImGui\ImGuiToggle\imgui_offset_rect.h" />
+    <ClInclude Include="ImGui\ImGuiToggle\imgui_toggle.h" />
+    <ClInclude Include="ImGui\ImGuiToggle\imgui_toggle_math.h" />
+    <ClInclude Include="ImGui\ImGuiToggle\imgui_toggle_palette.h" />
+    <ClInclude Include="ImGui\ImGuiToggle\imgui_toggle_presets.h" />
+    <ClInclude Include="ImGui\ImGuiToggle\imgui_toggle_renderer.h" />
+    <ClInclude Include="ImGui\imgui_impl_dx11.h" />
+    <ClInclude Include="ImGui\imgui_impl_win32.h" />
+    <ClInclude Include="ImGui\imgui_internal.h" />
+    <ClInclude Include="ImGui\imgui_range_slider.h" />
+    <ClInclude Include="ImGui\imgui_stdlib.h" />
+    <ClInclude Include="ImGui\implot.h" />
+    <ClInclude Include="ImGui\implot3d.h" />
+    <ClInclude Include="ImGui\implot3d_internal.h" />
+    <ClInclude Include="ImGui\implot_internal.h" />
+    <ClInclude Include="ImGui\imstb_rectpack.h" />
+    <ClInclude Include="ImGui\imstb_textedit.h" />
+    <ClInclude Include="ImGui\imstb_truetype.h" />
+    <ClInclude Include="ImGui\stb_image.h" />
+    <ClInclude Include="MainGUI.h" />
+    <ClInclude Include="PicoJson\picojson.h" />
+    <ClInclude Include="Stb\stb_connected_components.h" />
+    <ClInclude Include="Stb\stb_c_lexer.h" />
+    <ClInclude Include="Stb\stb_divide.h" />
+    <ClInclude Include="Stb\stb_ds.h" />
+    <ClInclude Include="Stb\stb_dxt.h" />
+    <ClInclude Include="Stb\stb_easy_font.h" />
+    <ClInclude Include="Stb\stb_herringbone_wang_tile.h" />
+    <ClInclude Include="Stb\stb_hexwave.h" />
+    <ClInclude Include="Stb\stb_image.h" />
+    <ClInclude Include="Stb\stb_image_resize2.h" />
+    <ClInclude Include="Stb\stb_image_write.h" />
+    <ClInclude Include="Stb\stb_include.h" />
+    <ClInclude Include="Stb\stb_leakcheck.h" />
+    <ClInclude Include="Stb\stb_perlin.h" />
+    <ClInclude Include="Stb\stb_rect_pack.h" />
+    <ClInclude Include="Stb\stb_sprintf.h" />
+    <ClInclude Include="Stb\stb_textedit.h" />
+    <ClInclude Include="Stb\stb_tilemap_editor.h" />
+    <ClInclude Include="Stb\stb_truetype.h" />
+    <ClInclude Include="Stb\stb_voxel_render.h" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

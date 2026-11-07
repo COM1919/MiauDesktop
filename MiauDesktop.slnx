@@ -3,5 +3,8 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
-  <Project Path="MiauDesktop.vcxproj" Id="1d5ee998-f612-45cf-af26-e0e3fae8e577" />
+  <Folder Name="/srv/">
+    <Project Path="srv/MiauDesktop/MiauDesktop.vcxproj" Id="1d5ee998-f612-45cf-af26-e0e3fae8e577" />
+    <Project Path="srv/MiauSettings/MiauSettings.vcxproj" Id="a7f3c2e1-5b4d-4e8a-9c1f-2d6b8e4a7c93" />
+  </Folder>
 </Solution>

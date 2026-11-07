@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!-- ===================================================================== -->
+  <!-- MiauSettings：MiauDesktop 的 WinUI3（Windows App SDK / C++WinRT）设置程序 -->
+  <!-- 部署形态：非打包（WindowsPackageType=None）+ 自包含（WindowsAppSDKSelfContained）-->
+  <!-- ===================================================================== -->
+  <PropertyGroup Label="NuGet">
+    <RestoreProjectStyle>PackageReference</RestoreProjectStyle>
+    <NuGetTargetMoniker>native,Version=v0.0</NuGetTargetMoniker>
+    <NuGetTargetPlatformIdentifier>Windows</NuGetTargetPlatformIdentifier>
+    <NuGetTargetPlatformVersion>$(WindowsTargetPlatformVersion)</NuGetTargetPlatformVersion>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Globals">
+    <CppWinRTOptimized>true</CppWinRTOptimized>
+    <CppWinRTRootNamespaceAutoMerge>true</CppWinRTRootNamespaceAutoMerge>
+    <MinimalCoreWin>true</MinimalCoreWin>
+    <VCProjectVersion>18.0</VCProjectVersion>
+    <ProjectGuid>{a7f3c2e1-5b4d-4e8a-9c1f-2d6b8e4a7c93}</ProjectGuid>
+    <ProjectName>MiauSettings</ProjectName>
+    <RootNamespace>MiauSettings</RootNamespace>
+    <TargetName>$(RootNamespace)</TargetName>
+    <DefaultLanguage>zh-CN</DefaultLanguage>
+    <MinimumVisualStudioVersion>16.0</MinimumVisualStudioVersion>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformMinVersion>10.0.22000.0</WindowsTargetPlatformMinVersion>
+    <UseWinUI>true</UseWinUI>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <AppxPackage>false</AppxPackage>
+    <WindowsPackageType>None</WindowsPackageType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.6.5" />
+    <PackageReference Include="Microsoft.Windows.CppWinRT" Version="2.0.250303.1" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2957" />
+  </ItemGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <DesktopCompatible>true</DesktopCompatible>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'" Label="Configuration">
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Release'" Label="Configuration">
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+
+  <!-- 输出目录：两个 exe 统一输出到 srv\bin\<Platform>\<Configuration>\ -->
+  <PropertyGroup>
+    <OutDir>$(MSBuildThisFileDirectory)..\bin\$(Platform)\$(Configuration)\</OutDir>
+    <AppxPriInitialPath></AppxPriInitialPath>
+  </PropertyGroup>
+
+  <!-- =================================================================== -->
+  <!-- XAML 编译链补齐                                                      -->
+  <!-- VS 2026 移除了 UWP C++ 工具，因此 Microsoft.Windows.UI.Xaml.Cpp.targets -->
+  <!-- 不再随 MSBuild 提供，MarkupCompilePass1/2 不会被挂进构建流程。        -->
+  <!-- 这里手工完成原文件负责的最小职责：                                    -->
+  <!--   1. 让 XAML 生成物落到 GeneratedFilesDir（与 cppwinrt 产物同目录）   -->
+  <!--   2. 在 ClCompile 之前运行 MarkupCompilePass1/Pass2                  -->
+  <!--   3. 把 Pass2 生成的 .cpp 加入 @(ClCompile)                          -->
+  <!-- =================================================================== -->
+  <PropertyGroup>
+    <XamlGeneratedOutputPath>$(GeneratedFilesDir)</XamlGeneratedOutputPath>
+    <XamlProjectName>$(RootNamespace)</XamlProjectName>
+    <UseVCMetaManaged>false</UseVCMetaManaged>
+    <!-- 本项目自身的 winmd（MIDL + cppwinrt 合并产物）作为 XAML 的"本地程序集" -->
+    <LocalAssembly>$(CppWinRTMergedDir)$(RootNamespace).winmd</LocalAssembly>
+    <XamlLocalAssembly>$(LocalAssembly)</XamlLocalAssembly>
+    <MarkupCompilePass1DependsOn>ResolveReferences;_MiauSettingsCollectWinmdReferences;$(MarkupCompilePass1DependsOn)</MarkupCompilePass1DependsOn>
+    <MarkupCompilePass2DependsOn>ResolveReferences;_MiauSettingsCollectWinmdReferences;$(MarkupCompilePass2DependsOn)</MarkupCompilePass2DependsOn>
+  </PropertyGroup>
+
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <PrecompiledHeaderOutputFile>$(IntDir)pch.pch</PrecompiledHeaderOutputFile>
+      <WarningLevel>Level3</WarningLevel>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalOptions>%(AdditionalOptions) /bigobj /utf-8</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(MSBuildThisFileDirectory);$(MSBuildThisFileDirectory)..\Shared;$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <!-- 与 WindowsAppSDK 示例一致的混合 CRT 链接方式：静态链接 CRT，避免额外 VC 运行时依赖 -->
+      <RuntimeLibrary Condition="'$(Configuration)'=='Debug'">MultiThreadedDebug</RuntimeLibrary>
+      <RuntimeLibrary Condition="'$(Configuration)'=='Release'">MultiThreaded</RuntimeLibrary>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <AdditionalDependencies>windowsapp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <IgnoreSpecificDefaultLibraries Condition="'$(Configuration)'=='Debug'">%(IgnoreSpecificDefaultLibraries);libucrtd.lib</IgnoreSpecificDefaultLibraries>
+      <IgnoreSpecificDefaultLibraries Condition="'$(Configuration)'=='Release'">%(IgnoreSpecificDefaultLibraries);libucrt.lib</IgnoreSpecificDefaultLibraries>
+      <AdditionalOptions Condition="'$(Configuration)'=='Debug'">%(AdditionalOptions) /defaultlib:ucrtd.lib</AdditionalOptions>
+      <AdditionalOptions Condition="'$(Configuration)'=='Release'">%(AdditionalOptions) /defaultlib:ucrt.lib</AdditionalOptions>
+    </Link>
+    <Manifest>
+      <EnableSegmentHeap>true</EnableSegmentHeap>
+    </Manifest>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
+    <ClCompile>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
+    <ClCompile>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+  </ItemDefinitionGroup>
+
+  <ItemGroup>
+    <Manifest Include="app.manifest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ClInclude Include="pch.h" />
+    <ClInclude Include="SettingsClient.h" />
+    <ClInclude Include="App.xaml.h">
+      <DependentUpon>App.xaml</DependentUpon>
+    </ClInclude>
+    <ClInclude Include="MainWindow.xaml.h">
+      <DependentUpon>MainWindow.xaml</DependentUpon>
+      <SubType>Code</SubType>
+    </ClInclude>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ApplicationDefinition Include="App.xaml" />
+    <Page Include="MainWindow.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ClCompile Include="pch.cpp">
+      <PrecompiledHeader>Create</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="SettingsClient.cpp" />
+    <ClCompile Include="App.xaml.cpp">
+      <DependentUpon>App.xaml</DependentUpon>
+    </ClCompile>
+    <ClCompile Include="MainWindow.xaml.cpp">
+      <DependentUpon>MainWindow.xaml</DependentUpon>
+      <SubType>Code</SubType>
+    </ClCompile>
+    <ClCompile Include="$(GeneratedFilesDir)module.g.cpp" />
+    <ClCompile Include="XamlMetadataGlue.cpp" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Midl Include="Project.idl">
+      <SubType>Code</SubType>
+    </Midl>
+  </ItemGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+
+  <!-- =================================================================== -->
+  <!-- XAML 编译链挂载（对应原 Microsoft.Windows.UI.Xaml.Cpp.targets 的职责） -->
+  <!-- =================================================================== -->
+  <Target Name="_MiauSettingsCollectWinmdReferences">
+    <ItemGroup>
+      <WinMDReferenceToCompile Include="@(ReferencePath)" Condition="'%(ReferencePath.Extension)' == '.winmd'" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="_MiauSettingsXamlCompile"
+          BeforeTargets="ClCompile"
+          DependsOnTargets="ResolveReferences;_MiauSettingsCollectWinmdReferences;MarkupCompilePass1;MarkupCompilePass2"
+          Condition="'@(Page)' != '' Or '@(ApplicationDefinition)' != ''">
+    <ItemGroup>
+      <!-- Pass1/Pass2 产出的代码需要参与编译（VS2026 无 Cpp XAML 规则，故显式列出） -->
+      <ClCompile Include="$(IntDir)XamlTypeInfo.g.cpp">
+        <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      </ClCompile>
+      <ClCompile Include="$(IntDir)XamlTypeInfo.Impl.g.cpp">
+        <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      </ClCompile>
+      <ClCompile Include="$(IntDir)XamlLibMetadataProvider.g.cpp">
+        <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      </ClCompile>
+    </ItemGroup>
+  </Target>
+</Project>
