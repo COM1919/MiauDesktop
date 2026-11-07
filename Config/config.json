@@ -1,0 +1,58 @@
+{
+  "Settings": {
+    "Animations": {
+      "Ease": 5,
+      "Enabled": true,
+      "Speed": 0.60000002384185791
+    }
+  },
+  "性能监控": {
+    "ShowCpu": true,
+    "ShowGpu": true,
+    "ShowMemory": true,
+    "Visible": true,
+    "WindowPos": {
+      "X": 810,
+      "Y": 230
+    },
+    "WindowSize": {
+      "Height": 175,
+      "Width": 470
+    }
+  },
+  "调试演示": {
+    "Visible": true,
+    "WindowPos": {
+      "X": 60,
+      "Y": 60
+    },
+    "WindowSize": {
+      "Height": 205,
+      "Width": 353
+    }
+  },
+  "进程管理": {
+    "RefreshIntervalMs": 2000,
+    "ShowSystemProcess": false,
+    "Visible": true,
+    "WindowPos": {
+      "X": 118,
+      "Y": 482
+    },
+    "WindowSize": {
+      "Height": 450,
+      "Width": 700
+    }
+  },
+  "音乐信息显示": {
+    "Visible": true,
+    "WindowPos": {
+      "X": 1356,
+      "Y": 395
+    },
+    "WindowSize": {
+      "Height": 160,
+      "Width": 400
+    }
+  }
+}

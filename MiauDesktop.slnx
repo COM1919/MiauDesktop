@@ -1,0 +1,7 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="MiauDesktop.vcxproj" Id="1d5ee998-f612-45cf-af26-e0e3fae8e577" />
+</Solution>

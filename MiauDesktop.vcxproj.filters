@@ -1,0 +1,357 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="源文件">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="头文件">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="资源文件">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="ImGui">
+      <UniqueIdentifier>{f43d870e-3d75-4d44-9ac4-2304a8bc4473}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ImGui\Icons">
+      <UniqueIdentifier>{3da914ae-ded8-4eee-a318-bd691add8376}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ImGui\Toggle">
+      <UniqueIdentifier>{667b541f-80fb-4c0f-b78b-202b09d6ebdc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ImGui\Markdown">
+      <UniqueIdentifier>{d55fcf84-8a1b-4ace-a546-33c71006a18f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="头文件\Components">
+      <UniqueIdentifier>{0ba0a7f9-ba83-4b1a-9b94-490d74b51321}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ImGui\ImAnim">
+      <UniqueIdentifier>{dda8ae14-1ff4-47ce-aebb-ee0d1ab01a69}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="头文件\AppSettings">
+      <UniqueIdentifier>{c51171c3-503c-4cb5-8fd9-4691e1ba9a22}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="源文件\AppSettings">
+      <UniqueIdentifier>{6bd5e5ca-2a59-4f35-af64-671dbc03cc31}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="源文件\Config">
+      <UniqueIdentifier>{4e3eb829-a640-482d-b0c0-e20fe81f7efb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="头文件\Config">
+      <UniqueIdentifier>{f326b2ff-394e-4cd4-b2ab-dde9e681c2ee}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="头文件\GuiBase">
+      <UniqueIdentifier>{1c14b906-556a-406e-a7a3-b884cdf432f0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="源文件\GuiBase">
+      <UniqueIdentifier>{77e3076f-d797-42b2-90a3-e38fb4b430b5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Stb">
+      <UniqueIdentifier>{c0c6d371-6d3d-4db9-904a-7d2a0c9f133e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="PicoJson">
+      <UniqueIdentifier>{99511557-e4b2-4980-8658-113f03fa0635}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="ImGui\imgui.cpp">
+      <Filter>ImGui</Filter>
+    </ClCompile>
+    <ClCompile Include="ImGui\imgui_draw.cpp">
+      <Filter>ImGui</Filter>
+    </ClCompile>
+    <ClCompile Include="ImGui\imgui_impl_dx11.cpp">
+      <Filter>ImGui</Filter>
+    </ClCompile>
+    <ClCompile Include="ImGui\imgui_impl_win32.cpp">
+      <Filter>ImGui</Filter>
+    </ClCompile>
+    <ClCompile Include="ImGui\imgui_stdlib.cpp">
+      <Filter>ImGui</Filter>
+    </ClCompile>
+    <ClCompile Include="ImGui\imgui_tables.cpp">
+      <Filter>ImGui</Filter>
+    </ClCompile>
+    <ClCompile Include="ImGui\imgui_widgets.cpp">
+      <Filter>ImGui</Filter>
+    </ClCompile>
+    <ClCompile Include="ImGui\implot.cpp">
+      <Filter>ImGui</Filter>
+    </ClCompile>
+    <ClCompile Include="ImGui\implot_items.cpp">
+      <Filter>ImGui</Filter>
+    </ClCompile>
+    <ClCompile Include="ImGui\implot3d.cpp">
+      <Filter>ImGui</Filter>
+    </ClCompile>
+    <ClCompile Include="ImGui\implot3d_items.cpp">
+      <Filter>ImGui</Filter>
+    </ClCompile>
+    <ClCompile Include="ImGui\implot3d_meshes.cpp">
+      <Filter>ImGui</Filter>
+    </ClCompile>
+    <ClCompile Include="ImGui\ImGuiMD\imgui_md.cpp">
+      <Filter>ImGui\Markdown</Filter>
+    </ClCompile>
+    <ClCompile Include="ImGui\ImGuiMD\md4c.c">
+      <Filter>ImGui\Markdown</Filter>
+    </ClCompile>
+    <ClCompile Include="ImGui\ImGuiToggle\imgui_toggle.cpp">
+      <Filter>ImGui\Toggle</Filter>
+    </ClCompile>
+    <ClCompile Include="ImGui\ImGuiToggle\imgui_toggle_palette.cpp">
+      <Filter>ImGui\Toggle</Filter>
+    </ClCompile>
+    <ClCompile Include="ImGui\ImGuiToggle\imgui_toggle_presets.cpp">
+      <Filter>ImGui\Toggle</Filter>
+    </ClCompile>
+    <ClCompile Include="ImGui\ImGuiToggle\imgui_toggle_renderer.cpp">
+      <Filter>ImGui\Toggle</Filter>
+    </ClCompile>
+    <ClCompile Include="ImGui\imgui_demo.cpp">
+      <Filter>ImGui</Filter>
+    </ClCompile>
+    <ClCompile Include="ImGui\ImAnim\im_anim.cpp">
+      <Filter>ImGui\ImAnim</Filter>
+    </ClCompile>
+    <ClCompile Include="ImGui\ImAnim\im_anim_demo.cpp">
+      <Filter>ImGui\ImAnim</Filter>
+    </ClCompile>
+    <ClCompile Include="ImGui\ImAnim\im_anim_doc.cpp">
+      <Filter>ImGui\ImAnim</Filter>
+    </ClCompile>
+    <ClCompile Include="ImGui\ImAnim\im_anim_usecase.cpp">
+      <Filter>ImGui\ImAnim</Filter>
+    </ClCompile>
+    <ClCompile Include="AppSettings\Appsettings.cpp">
+      <Filter>源文件\AppSettings</Filter>
+    </ClCompile>
+    <ClCompile Include="Component.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="MainGUI.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="Config\Config.cpp">
+      <Filter>源文件\Config</Filter>
+    </ClCompile>
+    <ClCompile Include="GuiBase\GuiAnimation.cpp">
+      <Filter>源文件\GuiBase</Filter>
+    </ClCompile>
+    <ClCompile Include="GuiBase\GUIBase.cpp">
+      <Filter>源文件\GuiBase</Filter>
+    </ClCompile>
+    <ClCompile Include="GuiBase\GuiCard.cpp">
+      <Filter>源文件\GuiBase</Filter>
+    </ClCompile>
+    <ClCompile Include="GuiBase\GuiCharts.cpp">
+      <Filter>源文件\GuiBase</Filter>
+    </ClCompile>
+    <ClCompile Include="GuiBase\GuiControls.cpp">
+      <Filter>源文件\GuiBase</Filter>
+    </ClCompile>
+    <ClCompile Include="GuiBase\GuiInput.cpp">
+      <Filter>源文件\GuiBase</Filter>
+    </ClCompile>
+    <ClCompile Include="GuiBase\GuiNavigation.cpp">
+      <Filter>源文件\GuiBase</Filter>
+    </ClCompile>
+    <ClCompile Include="GuiBase\GuiOverlay.cpp">
+      <Filter>源文件\GuiBase</Filter>
+    </ClCompile>
+    <ClCompile Include="GuiBase\GuiTheme.cpp">
+      <Filter>源文件\GuiBase</Filter>
+    </ClCompile>
+    <ClCompile Include="Stb\stb_vorbis.c">
+      <Filter>Stb</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="ImGui\imconfig.h">
+      <Filter>ImGui</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGui\imgui.h">
+      <Filter>ImGui</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGui\imgui_impl_dx11.h">
+      <Filter>ImGui</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGui\imgui_impl_win32.h">
+      <Filter>ImGui</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGui\imgui_internal.h">
+      <Filter>ImGui</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGui\imgui_range_slider.h">
+      <Filter>ImGui</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGui\imgui_stdlib.h">
+      <Filter>ImGui</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGui\implot.h">
+      <Filter>ImGui</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGui\implot_internal.h">
+      <Filter>ImGui</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGui\implot3d.h">
+      <Filter>ImGui</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGui\implot3d_internal.h">
+      <Filter>ImGui</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGui\imstb_rectpack.h">
+      <Filter>ImGui</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGui\imstb_textedit.h">
+      <Filter>ImGui</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGui\imstb_truetype.h">
+      <Filter>ImGui</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGui\stb_image.h">
+      <Filter>ImGui</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGui\Icons\fa.h">
+      <Filter>ImGui\Icons</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGui\Icons\IconsFontAwesome6.h">
+      <Filter>ImGui\Icons</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGui\ImGuiMD\imgui_md.h">
+      <Filter>ImGui\Markdown</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGui\ImGuiMD\md4c.h">
+      <Filter>ImGui\Markdown</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGui\ImGuiToggle\imgui_offset_rect.h">
+      <Filter>ImGui\Toggle</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGui\ImGuiToggle\imgui_toggle.h">
+      <Filter>ImGui\Toggle</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGui\ImGuiToggle\imgui_toggle_math.h">
+      <Filter>ImGui\Toggle</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGui\ImGuiToggle\imgui_toggle_palette.h">
+      <Filter>ImGui\Toggle</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGui\ImGuiToggle\imgui_toggle_presets.h">
+      <Filter>ImGui\Toggle</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGui\ImGuiToggle\imgui_toggle_renderer.h">
+      <Filter>ImGui\Toggle</Filter>
+    </ClInclude>
+    <ClInclude Include="Components\DebugDemo.h">
+      <Filter>头文件\Components</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGui\ImAnim\im_anim.h">
+      <Filter>ImGui\ImAnim</Filter>
+    </ClInclude>
+    <ClInclude Include="Components\MusicDisplay.h">
+      <Filter>头文件\Components</Filter>
+    </ClInclude>
+    <ClInclude Include="Components\PerformanceMonitor.h">
+      <Filter>头文件\Components</Filter>
+    </ClInclude>
+    <ClInclude Include="Components\ProcessManager.h">
+      <Filter>头文件\Components</Filter>
+    </ClInclude>
+    <ClInclude Include="AppSettings\Anim.h">
+      <Filter>头文件\AppSettings</Filter>
+    </ClInclude>
+    <ClInclude Include="AppSettings\AppSettings.h">
+      <Filter>头文件\AppSettings</Filter>
+    </ClInclude>
+    <ClInclude Include="AppSettings\ComponentCard.h">
+      <Filter>头文件\AppSettings</Filter>
+    </ClInclude>
+    <ClInclude Include="AppSettings\SettingsButton.h">
+      <Filter>头文件\AppSettings</Filter>
+    </ClInclude>
+    <ClInclude Include="AppSettings\SettingsPanel.h">
+      <Filter>头文件\AppSettings</Filter>
+    </ClInclude>
+    <ClInclude Include="Component.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="Framework.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="MainGUI.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="Config\Config.h">
+      <Filter>头文件\Config</Filter>
+    </ClInclude>
+    <ClInclude Include="GuiBase\GuiBase.h">
+      <Filter>头文件\GuiBase</Filter>
+    </ClInclude>
+    <ClInclude Include="Stb\stb_c_lexer.h">
+      <Filter>Stb</Filter>
+    </ClInclude>
+    <ClInclude Include="Stb\stb_connected_components.h">
+      <Filter>Stb</Filter>
+    </ClInclude>
+    <ClInclude Include="Stb\stb_divide.h">
+      <Filter>Stb</Filter>
+    </ClInclude>
+    <ClInclude Include="Stb\stb_ds.h">
+      <Filter>Stb</Filter>
+    </ClInclude>
+    <ClInclude Include="Stb\stb_dxt.h">
+      <Filter>Stb</Filter>
+    </ClInclude>
+    <ClInclude Include="Stb\stb_easy_font.h">
+      <Filter>Stb</Filter>
+    </ClInclude>
+    <ClInclude Include="Stb\stb_herringbone_wang_tile.h">
+      <Filter>Stb</Filter>
+    </ClInclude>
+    <ClInclude Include="Stb\stb_hexwave.h">
+      <Filter>Stb</Filter>
+    </ClInclude>
+    <ClInclude Include="Stb\stb_image.h">
+      <Filter>Stb</Filter>
+    </ClInclude>
+    <ClInclude Include="Stb\stb_image_resize2.h">
+      <Filter>Stb</Filter>
+    </ClInclude>
+    <ClInclude Include="Stb\stb_image_write.h">
+      <Filter>Stb</Filter>
+    </ClInclude>
+    <ClInclude Include="Stb\stb_include.h">
+      <Filter>Stb</Filter>
+    </ClInclude>
+    <ClInclude Include="Stb\stb_leakcheck.h">
+      <Filter>Stb</Filter>
+    </ClInclude>
+    <ClInclude Include="Stb\stb_perlin.h">
+      <Filter>Stb</Filter>
+    </ClInclude>
+    <ClInclude Include="Stb\stb_rect_pack.h">
+      <Filter>Stb</Filter>
+    </ClInclude>
+    <ClInclude Include="Stb\stb_sprintf.h">
+      <Filter>Stb</Filter>
+    </ClInclude>
+    <ClInclude Include="Stb\stb_textedit.h">
+      <Filter>Stb</Filter>
+    </ClInclude>
+    <ClInclude Include="Stb\stb_tilemap_editor.h">
+      <Filter>Stb</Filter>
+    </ClInclude>
+    <ClInclude Include="Stb\stb_truetype.h">
+      <Filter>Stb</Filter>
+    </ClInclude>
+    <ClInclude Include="Stb\stb_voxel_render.h">
+      <Filter>Stb</Filter>
+    </ClInclude>
+    <ClInclude Include="PicoJson\picojson.h">
+      <Filter>PicoJson</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>
