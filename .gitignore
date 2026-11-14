@@ -3,13 +3,13 @@
 x64/
 .trae/
 .reasonix/
-MiauDesktop/
+/MiauDesktop/
 
 reasonix.toml
 imgui.ini
 
 # 构建输出与 WinUI3 生成的中间文件
-obj/
-srv/bin/
-srv/MiauSettings/XamlMetaDataProvider.idl
-srv/MiauSettings/XamlMetaDataProvider.cpp
+/obj/
+/srv/bin/
+/srv/MiauSettings/XamlMetaDataProvider.idl
+/srv/MiauSettings/XamlMetaDataProvider.cpp

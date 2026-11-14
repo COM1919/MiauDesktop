@@ -1,0 +1,65 @@
+{
+  "format": 1,
+  "restore": {
+    "D:\\软件开发项目\\MiauDesktop\\srv\\MiauSettings\\MiauSettings.vcxproj": {}
+  },
+  "projects": {
+    "D:\\软件开发项目\\MiauDesktop\\srv\\MiauSettings\\MiauSettings.vcxproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "D:\\软件开发项目\\MiauDesktop\\srv\\MiauSettings\\MiauSettings.vcxproj",
+        "projectName": "MiauSettings",
+        "projectPath": "D:\\软件开发项目\\MiauDesktop\\srv\\MiauSettings\\MiauSettings.vcxproj",
+        "packagesPath": "C:\\Users\\MSI\\.nuget\\packages\\",
+        "outputPath": "D:\\软件开发项目\\MiauDesktop\\srv\\MiauSettings\\obj\\",
+        "projectStyle": "PackageReference",
+        "skipContentFileWrite": true,
+        "UsingMicrosoftNETSdk": false,
+        "configFilePaths": [
+          "C:\\Users\\MSI\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "native"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "native": {
+            "framework": "native",
+            "projectReferences": {}
+          }
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "native": {
+          "framework": "native",
+          "dependencies": {
+            "Microsoft.Windows.CppWinRT": {
+              "target": "Package",
+              "version": "[2.0.250303.1, )"
+            },
+            "Microsoft.Windows.SDK.BuildTools": {
+              "target": "Package",
+              "version": "[10.0.28000.2957, )"
+            },
+            "Microsoft.WindowsAppSDK": {
+              "target": "Package",
+              "version": "[2.6.5, )"
+            }
+          }
+        }
+      },
+      "runtimes": {
+        "win-x64": {
+          "#import": []
+        }
+      }
+    }
+  }
+}

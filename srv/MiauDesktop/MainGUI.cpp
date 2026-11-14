@@ -188,6 +188,7 @@ int RenderGui(HINSTANCE hInstance)
     g_compManager.AddComponent(std::make_unique<Components::ProcessManager>());
     g_compManager.AddComponent(std::make_unique<Components::DebugDemo>());
     g_compManager.AddComponent(std::make_unique<Components::MusicDisplay>());
+    g_compManager.AddComponent(std::make_unique<Components::GuiGallery>());
 
     // 启动设置服务（命名管道），供独立的 WinUI3 设置程序（MiauSettings.exe）读写设置
     SettingsServer::Start();

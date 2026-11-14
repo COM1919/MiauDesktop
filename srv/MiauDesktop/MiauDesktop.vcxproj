@@ -157,11 +157,15 @@
     <ClCompile Include="GuiBase\GUIBase.cpp" />
     <ClCompile Include="GuiBase\GuiCard.cpp" />
     <ClCompile Include="GuiBase\GuiCharts.cpp" />
+    <ClCompile Include="GuiBase\GuiContainer.cpp" />
     <ClCompile Include="GuiBase\GuiControls.cpp" />
+    <ClCompile Include="GuiBase\GuiElement.cpp" />
     <ClCompile Include="GuiBase\GuiInput.cpp" />
     <ClCompile Include="GuiBase\GuiNavigation.cpp" />
     <ClCompile Include="GuiBase\GuiOverlay.cpp" />
+    <ClCompile Include="GuiBase\GuiScroll.cpp" />
     <ClCompile Include="GuiBase\GuiTheme.cpp" />
+    <ClCompile Include="GuiBase\GuiWorkshop.cpp" />
     <ClCompile Include="ImGui\ImAnim\im_anim.cpp" />
     <ClCompile Include="ImGui\ImAnim\im_anim_demo.cpp" />
     <ClCompile Include="ImGui\ImAnim\im_anim_doc.cpp" />
@@ -194,6 +198,7 @@
     <ClInclude Include="Settings\SettingsServer.h" />
     <ClInclude Include="Component.h" />
     <ClInclude Include="Components\DebugDemo.h" />
+    <ClInclude Include="Components\GuiGallery.h" />
     <ClInclude Include="Components\MusicDisplay.h" />
     <ClInclude Include="Components\PerformanceMonitor.h" />
     <ClInclude Include="Components\ProcessManager.h" />

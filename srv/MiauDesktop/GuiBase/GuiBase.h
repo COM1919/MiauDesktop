@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <functional>
 
 // Windows.h 定义了 small 宏（展开为 char），与下方 GuiSpacingTokens 的
 // small 字段名冲突，导致 "float 后面的 char 非法" 编译错误。取消该宏定义。
@@ -119,6 +120,11 @@ namespace GuiBase
         float displayCompact = 30.0f;
         float display = 31.0f;
         float hero = 42.0f;
+
+        // 行高附加量：行高 = 字号 + lineGap
+        float lineGapTight = 3.0f;
+        float lineGap = 4.0f;
+        float lineGapRelaxed = 5.0f;
     };
 
     // 间距令牌：从发丝级到覆盖层的完整梯度
@@ -154,6 +160,24 @@ namespace GuiBase
         float section = 18.0f;
         float feature = 22.0f;
         float full = 999.0f;
+    };
+
+    // 控件尺寸令牌：与 EUI-NEO ControlSizeTokens 对齐
+    struct GuiControlSizeTokens
+    {
+        float progress = 14.0f;
+        float indicator = 22.0f;
+        float switchHeight = 24.0f;
+        float compact = 28.0f;
+        float menuItem = 34.0f;
+        float field = 35.0f;
+        float segmented = 36.0f;
+        float input = 40.0f;
+        float control = 44.0f;
+        float large = 44.0f;
+        float switchWidth = 46.0f;
+        float navigation = 50.0f;
+        float scrollbar = 8.0f;
     };
 
     // 阴影分级：从轻量按钮到辉光的五级阴影体系
@@ -192,6 +216,7 @@ namespace GuiBase
         GuiTypographyTokens typography;
         GuiSpacingTokens spacing;
         GuiRadiusTokens radius;
+        GuiControlSizeTokens control;
     };
 
     // 主题工厂：暗色 / 亮色配色（主色 #3871E0）
@@ -763,6 +788,221 @@ namespace GuiBase
 
     // 轻提示（短暂显示后自动消失）
     void GuiToast(const char* text, float duration = 2.0f);
+
+    // =========================================================================
+    // 滚动与虚拟化（GuiScroll.cpp）
+    // 移植自 EUI-NEO components/scroll.h / scrollview.h / virtuallist.h /
+    //           virtualmasonry.h
+    // =========================================================================
+
+    // 滚动条样式：轨道 / 滑块三态色 / 圆角 / 粗细
+    struct GuiScrollStyle
+    {
+        GuiColor track;
+        GuiColor thumb;
+        GuiColor thumbHover;
+        GuiColor thumbPressed;
+        float radius = 999.0f;
+        float thickness = 8.0f;
+
+        GuiScrollStyle();
+        GuiScrollStyle(const GuiThemeTokens& tokens);
+    };
+
+    // 独立滚动条：offset 为滚动偏移（自动 clamp 到 [0, contentSize - viewportSize]）
+    // size 为滚动条自身占位尺寸（宽/高其一为 0 时取 style.thickness）
+    // 返回 true 表示 offset 本帧发生了变化
+    bool GuiScrollBar(const char* label, float* offset, float viewportSize, float contentSize,
+                      const ImVec2& size, bool horizontal = false,
+                      const GuiScrollStyle& style = GuiScrollStyle());
+
+    // 滚动视图：Begin 内可放任意 ImGui 控件，End 时按内容高度绘制滚动条并 clamp offset
+    // offset 为调用方持有的滚动偏移；返回 false 表示内容不可见，此时仍需调用 End
+    bool BeginGuiScrollView(const char* label, const ImVec2& size, float* offset,
+                            const GuiScrollStyle& style = GuiScrollStyle(),
+                            ImGuiWindowFlags flags = 0);
+    void EndGuiScrollView();
+
+    // 虚拟列表可见区间：first/last 为闭区间行索引，min/max 为视口屏幕矩形
+    struct GuiVirtualRange
+    {
+        int first = 0;
+        int last = -1;
+        float offset = 0.0f;
+        ImVec2 min;
+        ImVec2 max;
+    };
+
+    // 固定行高虚拟列表：提交滚动/滚轮交互并返回可见区间（last < first 表示无可见行）
+    GuiVirtualRange GuiVirtualList(const char* label, const ImVec2& size, int itemCount,
+                                   float rowHeight, float* offset, float overscanRows = 2.0f,
+                                   const GuiScrollStyle& style = GuiScrollStyle());
+
+    // 虚拟列表行：绘制行背景 + 命中检测，返回是否被点击
+    bool GuiVirtualListRow(const char* label, const GuiVirtualRange& range, int index,
+                           float rowHeight, bool selected = false);
+
+    // 瀑布流可见区间
+    struct GuiMasonryRange
+    {
+        int first = 0;
+        int last = -1;
+        float offset = 0.0f;
+        ImVec2 min;
+        ImVec2 max;
+    };
+
+    // 多列虚拟瀑布流：heightOf(index, columnWidth) 返回该 cell 的高度
+    // 列高前缀在 itemCount / columns / gap 变化时才重算，其余帧 O(可见项)
+    GuiMasonryRange GuiVirtualMasonry(const char* label, const ImVec2& size, int itemCount,
+                                      int columns, float gap, float* offset,
+                                      const std::function<float(int, float)>& heightOf,
+                                      float overscanRows = 1.0f,
+                                      const GuiScrollStyle& style = GuiScrollStyle());
+
+    // 瀑布流 cell：矩形取自上一次 GuiVirtualMasonry 的布局缓存，返回是否被点击
+    bool GuiVirtualMasonryCell(const char* label, int index, bool selected = false);
+
+    // =========================================================================
+    // 容器与布局（GuiContainer.cpp）
+    // 移植自 EUI-NEO components/navbar.h / sidebar.h / panel.h / layout_debug.h
+    // =========================================================================
+
+    // 导航项：图标 + 文字 + 值
+    struct GuiNavbarItem
+    {
+        const char* label = nullptr;
+        const char* icon = nullptr;
+        int value = 0;
+    };
+
+    // 导航栏配置
+    struct GuiNavbarOptions
+    {
+        float width = 0.0f;   // <=0 时取可用宽度
+        float height = 64.0f;
+        bool compact = false; // 紧凑模式：只显示图标
+        const char* brandTitle = nullptr;
+        const char* brandIcon = nullptr;
+        const char* subtitle = nullptr;
+        const char* footerText = nullptr;
+        const char* footerIcon = nullptr;
+        bool* footerClicked = nullptr; // 输出：footer 按钮本帧是否被点击
+        bool dark = true;              // 取暗色 / 亮色主题令牌
+    };
+
+    // 顶部导航栏：返回 true 表示选中项变化（*selectedIndex 同步更新）
+    bool GuiNavbar(const char* label, const GuiNavbarItem* items, int itemCount,
+                   int* selectedIndex, const GuiNavbarOptions& options = GuiNavbarOptions());
+
+    // 右侧抽屉配置
+    struct GuiSidebarOptions
+    {
+        float width = 0.0f;  // <=0 时取可用宽度
+        float height = 0.0f; // <=0 时取可用高度
+        float drawerWidth = 320.0f;
+        const char* title = nullptr;
+        const char* eyebrow = nullptr;
+        float duration = 0.24f; // 滑入/滑出时长（秒）
+        bool dark = true;
+    };
+
+    // 右侧抽屉：content 为抽屉内部内容回调，返回 true 表示 open 被本帧改变
+    bool GuiSidebar(const char* label, bool* open, const GuiSidebarOptions& options = GuiSidebarOptions(),
+                    const std::function<void()>& content = nullptr);
+
+    // 面板容器：绘制 Card 背景并把光标/裁剪推进到内容区（与 EndGuiPanel 配对）
+    bool BeginGuiPanel(const char* label, const ImVec2& size,
+                       const GuiCardStyle& style = GuiCardStyle());
+    void EndGuiPanel();
+
+    // 布局调试样式：外框 / 内边距 / 内容区 / 标签
+    struct GuiLayoutDebugStyle
+    {
+        GuiColor frame;
+        GuiColor padding;
+        GuiColor content;
+        GuiColor label;
+        float stroke = 1.0f;
+        float labelFontSize = 12.0f;
+        float labelLineHeight = 16.0f;
+        float labelX = 8.0f;
+        float labelY = 6.0f;
+        float labelHeight = 18.0f;
+
+        GuiLayoutDebugStyle();
+        GuiLayoutDebugStyle(const GuiThemeTokens& tokens);
+    };
+
+    // 布局调试覆盖层：外框 + inset 内边距 + 内容区描边 + 尺寸标签
+    void GuiLayoutDebugOverlay(const char* label, const ImVec2& size, float inset,
+                               const char* text = nullptr,
+                               const GuiLayoutDebugStyle& style = GuiLayoutDebugStyle());
+
+    // =========================================================================
+    // 基础元素（GuiElement.cpp）
+    // 移植自 EUI-NEO components/text.h / image.h / mousearea.h
+    // =========================================================================
+
+    // 水平对齐
+    enum class GuiTextAlign
+    {
+        Left,
+        Center,
+        Right
+    };
+
+    // 文本绘制：fontSize<=0 用 ImGui 当前字号；maxWidth>0 时按像素换行
+    // color.a<=0 时取主题 text 色；返回实际占用尺寸，光标推进到其下方
+    ImVec2 GuiText(const char* label, const char* text, float fontSize = 0.0f,
+                   GuiColor color = GuiColor(), GuiTextAlign align = GuiTextAlign::Left,
+                   float maxWidth = 0.0f, float lineHeight = 0.0f);
+
+    // 文本测量（不绘制）：maxWidth>0 时返回换行后的实际宽高
+    ImVec2 GuiTextMeasure(const char* text, float fontSize = 0.0f,
+                          float maxWidth = 0.0f, float lineHeight = 0.0f);
+
+    // 图片：纹理 + UV + tint + 透明度 + 圆角裁剪（texture 为空时不绘制）
+    void GuiImage(const char* label, Texture2D texture, const ImVec2& size,
+                  GuiColor tint = GuiColor(), float rounding = 0.0f, float opacity = 1.0f,
+                  const ImVec2& uv0 = ImVec2(0.0f, 0.0f), const ImVec2& uv1 = ImVec2(1.0f, 1.0f));
+
+    // 鼠标区域配置
+    struct GuiMouseAreaOptions
+    {
+        bool disabled = false;
+        float rounding = 0.0f;
+        GuiColor color; // alpha<=0 时不绘制背景
+        ImGuiMouseCursor cursor = ImGuiMouseCursor_Arrow;
+        const char* tooltip = nullptr;
+    };
+
+    // 鼠标区域原语：hover 时设置鼠标指针，可选背景与 tooltip，返回是否被点击
+    bool GuiMouseArea(const char* label, const ImVec2& size,
+                      const GuiMouseAreaOptions& options = GuiMouseAreaOptions(),
+                      const std::function<void()>& onClick = nullptr);
+
+    // =========================================================================
+    // workshop 实验组件（GuiWorkshop.cpp）
+    // 移植自 EUI-NEO components/workshop/heart_switch.h / neumorphic_button.h /
+    //           tilt_card.h / card_slider.h
+    // =========================================================================
+
+    // 心形点赞开关：点击切换，按下缩放回弹 + 颜色过渡，返回 true 表示状态变化
+    bool GuiHeartSwitch(const char* label, bool* value, const ImVec2& size = ImVec2(36.0f, 36.0f));
+
+    // 新拟态按钮：亮/暗双阴影凸起，按下转为双内阴影并缩放
+    bool GuiNeumorphicButton(const char* label, const ImVec2& size = ImVec2(0.0f, 0.0f));
+
+    // 3D 倾斜卡片：鼠标在卡片上移动时按透视偏移四角并叠加高光
+    bool GuiTiltCard(const char* label, const ImVec2& size, const char* title,
+                     const char* subtitle = nullptr,
+                     const std::function<void()>& content = nullptr);
+
+    // 卡片轮播：textures 可为 nullptr 项（无图时用 surface 底色），返回选中项是否变化
+    bool GuiCardSlider(const char* label, const Texture2D* textures, const char* const* titles,
+                       const char* const* subtitles, int count, int* selectedIndex,
+                       const ImVec2& size);
 }
 
 // =============================================================================
