@@ -499,9 +499,9 @@ namespace GuiBase
     // 选中卡片居中放大，左右相邻卡片位移并缩小叠加，只绘制 ±2 张；
     // 底部半透明渐变条 + 标题/副标题，左右圆形箭头 + 底部指示点
     // =========================================================================
-    bool GuiCardSlider(const char* label, const Texture2D* textures, const char* const* titles,
-                       const char* const* subtitles, int count, int* selectedIndex,
-                       const ImVec2& size)
+    bool GuiCardSliderEx(const char* label, const Texture2D* textures, const char* const* titles,
+                         const char* const* subtitles, int count, int* selectedIndex,
+                         const ImVec2& size, const GuiCardSliderOptions& options)
     {
         if (count <= 0 || selectedIndex == nullptr || size.x <= 0.0f || size.y <= 0.0f)
         {
@@ -519,13 +519,41 @@ namespace GuiBase
         const float scale = std::min(std::min(size.x / 750.0f, (size.y - 56.0f) / 500.0f), 1.0f);
         const float baseWidth = 250.0f * std::max(0.4f, scale);
         const float baseHeight = 400.0f * std::max(0.4f, scale);
-        const float slotOffset = baseWidth * 1.10f;
+        // cardSpacing 叠加在基准位距上（card_slider.h:63）
+        const float slotOffset = baseWidth * 1.10f + std::max(0.0f, options.cardSpacing);
 
         ImGui::PushID(label != nullptr ? label : "##gui_card_slider");
         const ImGuiID sliderId = ImGui::GetID("##gui_card_slider_anim");
 
         int current = std::clamp(*selectedIndex, 0, count - 1);
         bool changed = false;
+
+        // 自动播放（card_slider.h:62-64）：按 interval 秒推进选中项
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        if (options.autoPlay && count > 1)
+        {
+            const ImGuiID autoKey = ImGui::GetID("##gui_card_slider_auto");
+            const int nowMs = static_cast<int>(ImGui::GetTime() * 1000.0);
+            const int intervalMs = static_cast<int>(std::max(0.10f, options.interval) * 1000.0f);
+            int nextMs = ImGui::GetStateStorage()->GetInt(autoKey, 0);
+            if (nextMs <= 0)
+            {
+                ImGui::GetStateStorage()->SetInt(autoKey, nowMs + intervalMs);
+            }
+            else if (nowMs >= nextMs)
+            {
+                current = (current + 1) % count;
+                changed = true;
+                ImGui::GetStateStorage()->SetInt(autoKey, nowMs + intervalMs);
+            }
+        }
+
+        // 背景遮罩（card_slider.h:65）
+        if (options.background)
+        {
+            const ImU32 background = tokens.isDark ? IM_COL32(0, 0, 0, 46) : IM_COL32(0, 0, 0, 16);
+            drawList->AddRectFilled(pos, maxPos, background, tokens.radius.section);
+        }
 
         // 位移动画：沿最短方向平滑靠近当前项（支持首尾环绕，不会整圈回绕）
         float* animSlot = ImGui::GetStateStorage()->GetFloatRef(sliderId ^ 0x51ED2707u,
@@ -546,11 +574,11 @@ namespace GuiBase
                     delta += cycle;
                 }
             }
+            // duration 越小收敛越快（card_slider.h:64 duration）
+            const float speed = 1.0f / std::max(0.02f, options.duration);
             const float dt = std::clamp(ImGui::GetIO().DeltaTime, 0.0f, 0.1f);
-            *animSlot += delta * (1.0f - std::exp(-12.0f * dt));
+            *animSlot += delta * (1.0f - std::exp(-speed * dt));
         }
-
-        ImDrawList* drawList = ImGui::GetWindowDrawList();
 
         // 连续视觉中心：animSlot 可为小数/越界，绘制时按 count 取模映射回真实索引
         const int visualCenter = static_cast<int>(std::lround(*animSlot));
@@ -597,7 +625,11 @@ namespace GuiBase
                 const float cardWidth = baseWidth * cardScale;
                 const float cardHeight = baseHeight * cardScale;
                 const float cardCenterX = centerX + slot * slotOffset;
-                const ImVec2 cardMin(cardCenterX - cardWidth * 0.5f, centerY - cardHeight * 0.5f);
+                // tilt（card_slider.h:66）：侧边卡片轻微上下错开，营造倾斜层次
+                const float tiltOffsetY =
+                    (options.tilt && cardScale < 0.9f) ? ((slot > 0.0f) ? 8.0f : -8.0f) : 0.0f;
+                const ImVec2 cardMin(cardCenterX - cardWidth * 0.5f,
+                                     centerY - cardHeight * 0.5f + tiltOffsetY);
                 const ImVec2 cardMax(cardMin.x + cardWidth, cardMin.y + cardHeight);
                 if (cardMax.x < pos.x || cardMin.x > maxPos.x)
                 {
@@ -760,5 +792,14 @@ namespace GuiBase
         ImGui::SetCursorScreenPos(ImVec2(pos.x, maxPos.y));
         ImGui::PopID();
         return changed;
+    }
+
+    // 卡片轮播（兼容旧签名：走默认参数）
+    bool GuiCardSlider(const char* label, const Texture2D* textures, const char* const* titles,
+                       const char* const* subtitles, int count, int* selectedIndex,
+                       const ImVec2& size)
+    {
+        return GuiCardSliderEx(label, textures, titles, subtitles, count, selectedIndex, size,
+                               GuiCardSliderOptions());
     }
 }

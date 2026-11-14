@@ -92,6 +92,10 @@ protected:
 	virtual bool get_image(image_info& nfo) const;
 
 	virtual ImFont* get_font() const;
+	// 返回当前渲染层级的目标字号；返回 0 表示沿用当前字号
+	// 用途：配合 Dear ImGui 1.92 的动态字号（PushFont(font, size)）实现
+	// 「单一字体文件 + 按需烘焙多字号」，无需为每个字号预加载一份字体
+	virtual float get_font_size() const;
 	virtual ImVec4 get_color() const;
 
 

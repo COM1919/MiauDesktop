@@ -768,8 +768,8 @@ namespace GuiBase
     // 日期选择器（返回 true 表示日期变化）
     bool GuiDatePicker(const char* label, int* year, int* month, int* day);
 
-    // 时间选择器（返回 true 表示时间变化）
-    bool GuiTimePicker(const char* label, int* hour, int* minute);
+    // 时间选择器（返回 true 表示时间变化；minuteStep 为分钟步进，clamp 到 [1, 30]）
+    bool GuiTimePicker(const char* label, int* hour, int* minute, int minuteStep = 1);
 
     // =========================================================================
     // 浮层与反馈（GuiOverlay.cpp）
@@ -809,6 +809,17 @@ namespace GuiBase
         GuiScrollStyle(const GuiThemeTokens& tokens);
     };
 
+    // 滚动 / 虚拟化行为参数（对应 scrollview.h:38-40 / virtuallist.h:42-45 /
+    // virtualmasonry.h:47,70 的开关）
+    struct GuiVirtualScrollOptions
+    {
+        float wheelStep = 48.0f;      // 滚轮单格步进（0 表示用默认 48）
+        float scrollbarWidth = 0.0f;  // 滚动条宽度（0 表示用 GuiScrollStyle.thickness）
+        float scrollbarGap = 4.0f;    // 滚动条与内容之间的间隙
+        std::function<void()> onEndReached; // 触底回调（virtualmasonry.h:47）
+        float endReachedThreshold = 1.0f;   // 距底部多少个视口高度时触发
+    };
+
     // 独立滚动条：offset 为滚动偏移（自动 clamp 到 [0, contentSize - viewportSize]）
     // size 为滚动条自身占位尺寸（宽/高其一为 0 时取 style.thickness）
     // 返回 true 表示 offset 本帧发生了变化
@@ -820,7 +831,8 @@ namespace GuiBase
     // offset 为调用方持有的滚动偏移；返回 false 表示内容不可见，此时仍需调用 End
     bool BeginGuiScrollView(const char* label, const ImVec2& size, float* offset,
                             const GuiScrollStyle& style = GuiScrollStyle(),
-                            ImGuiWindowFlags flags = 0);
+                            ImGuiWindowFlags flags = 0,
+                            const GuiVirtualScrollOptions& scrollOptions = GuiVirtualScrollOptions());
     void EndGuiScrollView();
 
     // 虚拟列表可见区间：first/last 为闭区间行索引，min/max 为视口屏幕矩形
@@ -836,7 +848,8 @@ namespace GuiBase
     // 固定行高虚拟列表：提交滚动/滚轮交互并返回可见区间（last < first 表示无可见行）
     GuiVirtualRange GuiVirtualList(const char* label, const ImVec2& size, int itemCount,
                                    float rowHeight, float* offset, float overscanRows = 2.0f,
-                                   const GuiScrollStyle& style = GuiScrollStyle());
+                                   const GuiScrollStyle& style = GuiScrollStyle(),
+                                   const GuiVirtualScrollOptions& scrollOptions = GuiVirtualScrollOptions());
 
     // 虚拟列表行：绘制行背景 + 命中检测，返回是否被点击
     bool GuiVirtualListRow(const char* label, const GuiVirtualRange& range, int index,
@@ -858,7 +871,8 @@ namespace GuiBase
                                       int columns, float gap, float* offset,
                                       const std::function<float(int, float)>& heightOf,
                                       float overscanRows = 1.0f,
-                                      const GuiScrollStyle& style = GuiScrollStyle());
+                                      const GuiScrollStyle& style = GuiScrollStyle(),
+                                      const GuiVirtualScrollOptions& scrollOptions = GuiVirtualScrollOptions());
 
     // 瀑布流 cell：矩形取自上一次 GuiVirtualMasonry 的布局缓存，返回是否被点击
     bool GuiVirtualMasonryCell(const char* label, int index, bool selected = false);
@@ -967,7 +981,15 @@ namespace GuiBase
                   GuiColor tint = GuiColor(), float rounding = 0.0f, float opacity = 1.0f,
                   const ImVec2& uv0 = ImVec2(0.0f, 0.0f), const ImVec2& uv1 = ImVec2(1.0f, 1.0f));
 
-    // 鼠标区域配置
+    // Markdown 文档控件（对应 EUI-NEO components/markdown.h 的「带滚动视口的 Markdown 控件」语义）
+    // 基于项目内置 imgui_md（md4c 解析）+ Card 背景 + 滚动视口；
+    // 字号层级由 imgui_md::get_font_size 提供 —— 单一字体文件 + ImGui 1.92 动态字号烘焙，
+    // 不加载多份字号字体，因此不会产生成倍的内存占用
+    // offset 为调用方持有的滚动偏移；返回 true 表示渲染成功
+    bool GuiMarkdown(const char* label, const char* markdownText, float* offset,
+                     const ImVec2& size, const GuiCardStyle& style = GuiCardStyle());
+
+    // 鼠标区域配置（事件族对应 mousearea.h:58-81）
     struct GuiMouseAreaOptions
     {
         bool disabled = false;
@@ -975,6 +997,14 @@ namespace GuiBase
         GuiColor color; // alpha<=0 时不绘制背景
         ImGuiMouseCursor cursor = ImGuiMouseCursor_Arrow;
         const char* tooltip = nullptr;
+
+        // 事件族（未设置的回调不触发）
+        std::function<void()> onPress;                 // 按下
+        std::function<void()> onRelease;               // 抬起
+        std::function<void()> onHover;                 // 每帧悬浮时
+        std::function<void(float, float)> onDrag;      // 拖拽（累计位移 dx, dy）
+        std::function<void(float)> onScroll;           // 滚轮（单位：格）
+        bool acceptRightButton = false;                // 是否接受右键（acceptedButtons）
     };
 
     // 鼠标区域原语：hover 时设置鼠标指针，可选背景与 tooltip，返回是否被点击
@@ -1003,6 +1033,160 @@ namespace GuiBase
     bool GuiCardSlider(const char* label, const Texture2D* textures, const char* const* titles,
                        const char* const* subtitles, int count, int* selectedIndex,
                        const ImVec2& size);
+
+    // =========================================================================
+    // EUI-NEO 参数级变体（按上游 Builder 开关补齐，实现在各自分组的 .cpp 中）
+    // =========================================================================
+
+    // --- 按钮变体（GuiControls.cpp，对应 button.h:51-52/65/70）---
+    // icon 为 FontAwesome 图标字符串（绘制在文字左侧）；disabled 时变灰且不响应
+    // 标签为 "文字##id" 时图标与文字并排，标签为空时只显示图标
+    bool GuiButtonEx(const char* label, const ImVec2& size = ImVec2(0.0f, 0.0f),
+                     const char* icon = nullptr, bool disabled = false,
+                     float pressScale = 0.985f);
+
+    // --- 步进器变体（GuiControls.cpp，对应 stepper.h:61-66）---
+    struct GuiStepperOptions
+    {
+        int step = 1;
+        int minValue = 0;
+        int maxValue = 100;
+        int base = 10;               // 2 / 8 / 10 / 16
+        int digits = 0;              // >0：补零到固定位数
+        int bitWidth = 0;            // >0：按位宽补零（2/8/16 进制）
+        bool showBasePrefix = false; // 0b / 0o / 0x 前缀
+        bool uppercase = false;      // 十六进制大写
+    };
+    bool GuiStepperEx(const char* label, int* value, const GuiStepperOptions& options);
+
+    // --- 输入框变体（GuiInput.cpp，对应 input.h:58-61/81-85）---
+    struct GuiInputOptions
+    {
+        bool multiline = false;
+        bool scrollbar = true;
+        const char* placeholder = nullptr;
+        int visibleLines = 3;                  // 多行时的可见行数
+        std::function<void()> onEnter;         // 单行：回车提交
+        std::function<void(bool)> onFocus;     // 焦点变化
+    };
+    bool GuiInputTextEx(const char* label, std::string* value, const ImVec2& size = ImVec2(0.0f, 0.0f),
+                        const GuiInputOptions& options = GuiInputOptions());
+
+    // --- 对话框变体（GuiOverlay.cpp，对应 dialog.h:64-65/75-77）---
+    struct GuiDialogOptions
+    {
+        const char* primaryText = nullptr;   // 主按钮文字（空则用"确定"）
+        const char* secondaryText = nullptr; // 次按钮文字（空则不显示）
+        std::function<void()> content;       // 自定义内容（替代纯文本消息）
+        std::function<void()> onPrimary;
+        std::function<void()> onSecondary;
+    };
+    bool GuiDialogEx(const char* title, bool* open, const char* message,
+                     const GuiDialogOptions& options = GuiDialogOptions());
+
+    // --- 多级右键菜单（GuiOverlay.cpp，对应 contextmenu.h:98/108）---
+    struct GuiMenuItem
+    {
+        const char* label = nullptr;
+        const GuiMenuItem* children = nullptr; // 子菜单数组（空表示叶子项）
+        int childCount = 0;
+        int value = -1;                        // 叶子项返回值
+    };
+    // 返回 true 表示选中了某个叶子项；*selectedValue 为其 value
+    bool GuiContextMenuTree(const char* label, const GuiMenuItem* items, int itemCount,
+                            int* selectedValue);
+
+    // --- Toast 变体（GuiOverlay.cpp，对应 toast.h:52-55/65-66）---
+    struct GuiToastOptions
+    {
+        const char* title = nullptr;
+        const char* icon = nullptr;
+        std::function<void()> onDismiss;     // 手动关闭
+        std::function<void()> onAutoDismiss; // 到时自动关闭
+    };
+    void GuiToastEx(const char* text, float duration, const GuiToastOptions& options);
+
+    // --- Tooltip 绑定（GuiOverlay.cpp，对应 tooltip.h:37-40）---
+    // 必须紧跟目标控件之后调用：内部用 IsItemHovered 判定，sourceId 仅用于 ID 隔离
+    void GuiTooltipFor(const char* sourceId, const char* text,
+                       const ImVec2& anchor = ImVec2(-1.0f, -1.0f),
+                       const ImVec2& bounds = ImVec2(0.0f, 0.0f));
+
+    // --- 轮播图文项（GuiNavigation.cpp，对应 carousel.h:58/65-67）---
+    struct GuiCarouselItem
+    {
+        const char* title = nullptr;
+        const char* subtitle = nullptr;
+        Texture2D texture = nullptr; // 为空时用表面色占位
+    };
+    struct GuiCarouselOptions
+    {
+        float cardWidthRatio = 0.62f; // 卡片宽 / 视口宽（clamp 到 0.32~1.0）
+        float overlap = 0.26f;        // 相邻卡片重叠比例（clamp 到 0~0.6）
+        float parallax = 0.35f;       // 左右卡片的缩小比例（0 表示不缩）
+    };
+    bool GuiCarouselEx(const char* label, const GuiCarouselItem* items, int itemCount,
+                       int* selectedIndex, float width, float height,
+                       const GuiCarouselOptions& options = GuiCarouselOptions());
+
+    // --- 文本层级（GuiElement.cpp，对应 text.h:13/21/29 的三档样式）---
+    void GuiTextBody(const char* label, const char* text, float maxWidth = 0.0f);
+    void GuiTextTitle(const char* label, const char* text, float maxWidth = 0.0f);
+    void GuiTextSubtitle(const char* label, const char* text, float maxWidth = 0.0f);
+
+    // --- 语义化主题组合（GuiTheme.cpp，对应 theme.h:181-270）---
+    struct GuiPageVisualTokens
+    {
+        GuiColor titleColor;
+        GuiColor subtitleColor;
+        GuiColor bodyColor;
+        GuiColor cardColor;
+        GuiColor mutedCardColor;
+        GuiColor softAccentColor;
+        float headerTopInset = 24.0f;
+        float headerTitleGap = 30.0f;
+        float headerContentGap = 40.0f;
+        float headerTitleSize = 31.0f;
+        float headerSubtitleSize = 20.0f;
+        float sectionGap = 16.0f;
+        float sectionInset = 20.0f;
+        float sectionRounding = 18.0f;
+        float labelSize = 17.0f;
+        float fieldHeight = 35.0f;
+    };
+
+    struct GuiFieldVisualTokens
+    {
+        float rounding = 6.0f;
+        float horizontalInset = 10.0f;
+        float focusLineHeight = 2.0f;
+        float borderLineHeight = 1.0f;
+        float popupRounding = 10.0f;
+        float popupOverlap = 1.0f;
+        GuiColor popupShadowColor;
+        float popupShadowBlur = 0.0f;
+        float popupShadowOffsetY = 0.0f;
+    };
+
+    GuiPageVisualTokens GuiPageVisuals(const GuiThemeTokens& tokens);
+    GuiFieldVisualTokens GuiFieldVisuals(const GuiThemeTokens& tokens);
+    GuiColor GuiButtonHoverColor(const GuiThemeTokens& tokens, const GuiColor& base);
+    GuiColor GuiButtonPressedColor(const GuiThemeTokens& tokens, const GuiColor& base);
+    GuiShadowStyle GuiPopupShadow(const GuiThemeTokens& tokens);
+
+    // --- 卡片轮播参数（GuiWorkshop.cpp，对应 card_slider.h:62-66）---
+    struct GuiCardSliderOptions
+    {
+        float duration = 0.28f;   // 切页动画时长（秒）
+        float interval = 3.0f;    // 自动播放间隔（秒）
+        float cardSpacing = 0.0f; // 额外卡片间距（像素，叠加在基准位距上）
+        bool autoPlay = false;
+        bool background = true;   // 是否绘制背景遮罩
+        bool tilt = false;        // 侧边卡片是否带轻微倾斜
+    };
+    bool GuiCardSliderEx(const char* label, const Texture2D* textures, const char* const* titles,
+                         const char* const* subtitles, int count, int* selectedIndex,
+                         const ImVec2& size, const GuiCardSliderOptions& options = GuiCardSliderOptions());
 }
 
 // =============================================================================

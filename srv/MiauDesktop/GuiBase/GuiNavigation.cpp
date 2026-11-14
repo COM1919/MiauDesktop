@@ -359,4 +359,229 @@ namespace GuiBase
 
         ImGui::PopID();
     }
+
+    // =========================================================================
+    // 轮播图文项（EUI carousel.h:58/65-67：图文卡片项 + 堆叠参数）
+    // 中心卡片完整显示，左右相邻卡片按 parallax 缩小、按 overlap 叠在其下；
+    // 点击箭头或相邻卡片切换，只绘制 ±1 张邻居（远侧不提交图元）
+    // =========================================================================
+    bool GuiCarouselEx(const char* label, const GuiCarouselItem* items, int itemCount,
+                       int* selectedIndex, float width, float height,
+                       const GuiCarouselOptions& options)
+    {
+        if (items == nullptr || itemCount <= 0 || selectedIndex == nullptr ||
+            width <= 0.0f || height <= 0.0f)
+        {
+            return false;
+        }
+
+        const GuiThemeTokens tokens = Theme::Dark(); // 每帧仅取一次令牌
+        const ImVec2 pos = ImGui::GetCursorScreenPos();
+        const ImVec2 maxPos(pos.x + width, pos.y + height);
+        const float centerX = pos.x + width * 0.5f;
+        const float centerY = pos.y + height * 0.5f;
+
+        const float ratio = std::clamp(options.cardWidthRatio, 0.32f, 1.0f);
+        const float overlap = std::clamp(options.overlap, 0.0f, 0.60f);
+        const float parallax = std::max(0.0f, options.parallax);
+        const float cardWidth = std::max(40.0f, width * ratio);
+        const float cardHeight = std::max(40.0f, height * 0.84f);
+        const float stepX = std::max(20.0f, cardWidth * (1.0f - overlap));
+        const float neighborScale = std::max(0.45f, 1.0f - 0.20f * parallax);
+
+        ImGui::PushID(label != nullptr ? label : "##gui_carousel_ex");
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        ImGui::Dummy(ImVec2(width, height));
+
+        int current = std::clamp(*selectedIndex, 0, itemCount - 1);
+        bool changed = false;
+
+        // 从远到近绘制：先 ±1 邻居，最后中心卡片（保证中心在最上层）
+        for (int distance = 1; distance >= 0; --distance)
+        {
+            for (int sign = -1; sign <= 1; sign += 2)
+            {
+                if (distance == 0 && sign > 0)
+                {
+                    continue; // 中心卡片只画一次
+                }
+
+                const int index = current + sign * distance;
+                if (index < 0 || index >= itemCount)
+                {
+                    continue;
+                }
+
+                const float scale = (distance == 0) ? 1.0f : neighborScale;
+                const float cardW = cardWidth * scale;
+                const float cardH = cardHeight * scale;
+                const float cardCenterX = centerX + static_cast<float>(sign * distance) * stepX;
+                const ImVec2 cardMin(cardCenterX - cardW * 0.5f, centerY - cardH * 0.5f);
+                const ImVec2 cardMax(cardMin.x + cardW, cardMin.y + cardH);
+                if (cardMax.x <= pos.x || cardMin.x >= maxPos.x)
+                {
+                    continue;
+                }
+
+                // 命中：邻居卡片也可点击切换
+                ImGui::PushID(index);
+                const ImVec2 savedCursor = ImGui::GetCursorScreenPos();
+                ImGui::SetCursorScreenPos(cardMin);
+                const bool clicked = ImGui::InvisibleButton("##card", ImVec2(cardW, cardH));
+                const bool hovered = ImGui::IsItemHovered();
+                ImGui::SetCursorScreenPos(savedCursor);
+                ImGui::PopID();
+
+                const float rounding = tokens.radius.section;
+                const GuiCarouselItem& item = items[index];
+
+                // 阴影
+                GuiShadowStyle shadow;
+                shadow.blur = (distance == 0) ? 20.0f : 14.0f;
+                shadow.offsetX = 0.0f;
+                shadow.offsetY = (distance == 0) ? 10.0f : 6.0f;
+                shadow.color = GuiColor(0.0f, 0.0f, 0.0f, (distance == 0) ? 0.30f : 0.20f);
+                DrawGuiSoftShadow(drawList, cardMin, ImVec2(cardW, cardH), shadow, rounding);
+
+                // 卡片主体：纹理或表面色占位
+                if (item.texture != nullptr)
+                {
+                    drawList->AddImageRounded((ImTextureID)item.texture, cardMin, cardMax,
+                                              ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f),
+                                              IM_COL32_WHITE, rounding);
+                }
+                else
+                {
+                    drawList->AddRectFilled(cardMin, cardMax, tokens.surfaceHover.ToImU32(), rounding);
+                }
+                if (hovered && distance > 0)
+                {
+                    drawList->AddRectFilled(cardMin, cardMax, IM_COL32(255, 255, 255, 14), rounding);
+                }
+                drawList->AddRect(cardMin, cardMax,
+                                  WithAlpha(tokens.border, (distance == 0) ? 0.60f : 0.35f).ToImU32(),
+                                  rounding, ImDrawFlags_RoundCornersAll, 1.0f);
+
+                // 底部渐变 + 标题 / 副标题
+                const float overlayHeight = cardH * 0.38f;
+                const ImVec2 overlayMin(cardMin.x, cardMax.y - overlayHeight);
+                drawList->AddRectFilledMultiColor(overlayMin, cardMax,
+                                                  IM_COL32(0, 0, 0, 0), IM_COL32(0, 0, 0, 0),
+                                                  IM_COL32(0, 0, 0, 180), IM_COL32(0, 0, 0, 180));
+
+                ImFont* font = ImGui::GetFont();
+                if (font != nullptr)
+                {
+                    float textBottom = cardMax.y - 10.0f;
+                    if (item.subtitle != nullptr && item.subtitle[0] != '\0')
+                    {
+                        const float subtitleSize = tokens.typography.label * scale;
+                        const ImVec2 extent = font->CalcTextSizeA(subtitleSize, cardW - 16.0f,
+                                                                  cardW - 16.0f, item.subtitle);
+                        drawList->AddText(font, subtitleSize,
+                                          ImVec2(cardMin.x + (cardW - extent.x) * 0.5f,
+                                                 textBottom - extent.y),
+                                          IM_COL32(255, 255, 255, 200), item.subtitle);
+                        textBottom -= extent.y + 2.0f;
+                    }
+                    if (item.title != nullptr && item.title[0] != '\0')
+                    {
+                        const float titleSize = tokens.typography.subtitle * scale;
+                        const ImVec2 extent = font->CalcTextSizeA(titleSize, cardW - 16.0f,
+                                                                  cardW - 16.0f, item.title);
+                        drawList->AddText(font, titleSize,
+                                          ImVec2(cardMin.x + (cardW - extent.x) * 0.5f,
+                                                 textBottom - extent.y),
+                                          IM_COL32(255, 255, 255, 250), item.title);
+                    }
+                }
+
+                if (clicked && distance > 0)
+                {
+                    current = index;
+                    changed = true;
+                }
+            }
+        }
+
+        // === 左右箭头（首尾环绕） ===
+        const float buttonSize = std::clamp(height * 0.14f, 26.0f, 40.0f);
+        const float halfButton = buttonSize * 0.5f;
+        const ImVec2 leftCenter(pos.x + tokens.spacing.section + halfButton, centerY);
+        const ImVec2 rightCenter(maxPos.x - tokens.spacing.section - halfButton, centerY);
+
+        auto drawArrow = [&](int buttonIndex, const ImVec2& buttonCenter, const char* icon) -> bool
+        {
+            ImGui::PushID(buttonIndex);
+            const ImVec2 savedCursor = ImGui::GetCursorScreenPos();
+            ImGui::SetCursorScreenPos(ImVec2(buttonCenter.x - halfButton, buttonCenter.y - halfButton));
+            const bool arrowClicked = ImGui::InvisibleButton("##arrow", ImVec2(buttonSize, buttonSize));
+            const bool arrowHovered = ImGui::IsItemHovered();
+            const bool arrowActive = ImGui::IsItemActive();
+            ImGui::SetCursorScreenPos(savedCursor);
+            ImGui::PopID();
+
+            const GuiColor background = arrowActive ? tokens.surfaceActive
+                                                    : (arrowHovered ? tokens.surfaceHover : tokens.surface);
+            drawList->AddCircleFilled(buttonCenter, halfButton, WithAlpha(background, 0.92f).ToImU32(), 24);
+            drawList->AddCircle(buttonCenter, halfButton, WithAlpha(tokens.border, 0.62f).ToImU32(), 24, 1.0f);
+
+            ImFont* font = ImGui::GetFont();
+            if (font != nullptr)
+            {
+                const float iconSize = tokens.typography.option;
+                const ImVec2 extent = font->CalcTextSizeA(iconSize, FLT_MAX, 0.0f, icon);
+                drawList->AddText(font, iconSize,
+                                  ImVec2(buttonCenter.x - extent.x * 0.5f,
+                                         buttonCenter.y - extent.y * 0.5f),
+                                  tokens.text.ToImU32(), icon);
+            }
+            return arrowClicked;
+        };
+
+        const bool wrap = (itemCount > 1);
+        if (wrap && drawArrow(0, leftCenter, ICON_FA_CHEVRON_LEFT))
+        {
+            current = (current - 1 + itemCount) % itemCount;
+            changed = true;
+        }
+        if (wrap && drawArrow(1, rightCenter, ICON_FA_CHEVRON_RIGHT))
+        {
+            current = (current + 1) % itemCount;
+            changed = true;
+        }
+
+        if (changed)
+        {
+            *selectedIndex = current;
+        }
+
+        // 底部指示点
+        const float dotSpacing = 14.0f;
+        const float dotsWidth = static_cast<float>(itemCount - 1) * dotSpacing;
+        if (dotsWidth + 24.0f <= width)
+        {
+            const float dotY = maxPos.y - 10.0f;
+            float dotX = centerX - dotsWidth * 0.5f;
+            for (int index = 0; index < itemCount; ++index)
+            {
+                if (index == current)
+                {
+                    drawList->AddRectFilled(ImVec2(dotX - 9.0f, dotY - 3.0f),
+                                            ImVec2(dotX + 9.0f, dotY + 3.0f),
+                                            tokens.primary.ToImU32(), 3.0f);
+                }
+                else
+                {
+                    drawList->AddCircleFilled(ImVec2(dotX, dotY), 3.0f,
+                                              WithAlpha(tokens.text, 0.32f).ToImU32(), 12);
+                }
+                dotX += dotSpacing;
+            }
+        }
+
+        ImGui::SetCursorScreenPos(ImVec2(pos.x, maxPos.y));
+        ImGui::PopID();
+        return changed;
+    }
 }

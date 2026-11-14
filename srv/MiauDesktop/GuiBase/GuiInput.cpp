@@ -529,11 +529,17 @@ namespace GuiBase
         return changed;
     }
 
-    // 时间选择器：时、分两段合并为一行显示，左右箭头以分钟为步进调整
+    // 时间选择器：时、分两段合并为一行显示，左右箭头以 minuteStep 分钟为步进调整
     // 跨 60 分钟自动进位或借位到小时，值发生变化时返回 true
-    bool GuiTimePicker(const char* label, int* hour, int* minute)
+    bool GuiTimePicker(const char* label, int* hour, int* minute, int minuteStep)
     {
+        if (hour == nullptr || minute == nullptr)
+        {
+            return false;
+        }
+
         GuiThemeTokens tokens = Theme::Dark();
+        const int safeMinuteStep = std::clamp(minuteStep, 1, 30); // timepicker.h:66 的分钟步进范围
         bool changed = false;
 
         ImGui::PushID(label);
@@ -555,22 +561,20 @@ namespace GuiBase
         const int step = ArrowStepRow("##row", timeText, columnWidth, tokens);
         if (step != 0)
         {
-            // 以分钟为步进：超过范围时向小时进位或借位
-            currentMinute += step;
-            if (currentMinute > 59)
+            // 以 minuteStep 分钟为步进：超出范围时循环归一，并同步进位 / 借位到小时
+            currentMinute += step * safeMinuteStep;
+            while (currentMinute > 59)
             {
-                currentMinute = 0;
-                ++currentHour;
-                if (currentHour > 23)
+                currentMinute -= 60;
+                if (++currentHour > 23)
                 {
                     currentHour = 0;
                 }
             }
-            else if (currentMinute < 0)
+            while (currentMinute < 0)
             {
-                currentMinute = 59;
-                --currentHour;
-                if (currentHour < 0)
+                currentMinute += 60;
+                if (--currentHour < 0)
                 {
                     currentHour = 23;
                 }
@@ -582,5 +586,103 @@ namespace GuiBase
 
         ImGui::PopID();
         return changed;
+    }
+
+    // =========================================================================
+    // 输入框变体（EUI input.h:58-61/81-85：多行 / 滚动条 / 占位符 / 回车 / 焦点）
+    // 背景与边框自绘，输入控件叠在其上；空值且未激活时绘制占位文本
+    // =========================================================================
+    bool GuiInputTextEx(const char* label, std::string* value, const ImVec2& size,
+                        const GuiInputOptions& options)
+    {
+        if (value == nullptr)
+        {
+            return false;
+        }
+
+        GuiThemeTokens tokens = Theme::Dark(); // 每帧仅取一次令牌
+        const float width = size.x > 0.0f ? size.x : 220.0f;
+        const float lineHeight = std::max(20.0f, tokens.control.field);
+        const int visibleLines = std::max(1, options.visibleLines);
+        const float height = options.multiline
+                                 ? (size.y > 0.0f ? size.y : lineHeight * static_cast<float>(visibleLines) + 10.0f)
+                                 : (size.y > 0.0f ? size.y : lineHeight);
+
+        ImGui::PushID(label != nullptr ? label : "##gui_input_ex");
+        const ImVec2 pos = ImGui::GetCursorScreenPos();
+        const ImVec2 maxPos(pos.x + width, pos.y + height);
+        const float rounding = tokens.radius.small;
+        const float inset = tokens.spacing.compact;
+
+        // 背景（先画，输入控件叠在其上）
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        drawList->AddRectFilled(pos, maxPos, tokens.surface.ToImU32(), rounding);
+
+        // 输入控件
+        ImGui::SetCursorScreenPos(ImVec2(pos.x + inset, pos.y + (options.multiline ? inset * 0.5f
+                                                                                  : (height - ImGui::GetFrameHeight()) * 0.5f)));
+        ImGui::PushItemWidth(width - inset * 2.0f);
+
+        bool edited = false;
+        bool submitted = false;
+        if (options.multiline)
+        {
+            const ImGuiInputTextFlags flags =
+                options.scrollbar ? ImGuiInputTextFlags_None : ImGuiInputTextFlags_NoHorizontalScroll;
+            edited = ImGui::InputTextMultiline("##input_multiline", value,
+                                              ImVec2(width - inset * 2.0f, height - inset), flags);
+        }
+        else
+        {
+            submitted = ImGui::InputText("##input_single", value, ImGuiInputTextFlags_EnterReturnsTrue);
+            edited = submitted || ImGui::IsItemEdited();
+        }
+
+        const bool active = ImGui::IsItemActive();
+        const bool hovered = ImGui::IsItemHovered();
+        ImGui::PopItemWidth();
+
+        // 边框：聚焦时用 primary 高亮，否则 border 常规色
+        const GuiColor borderColor = active ? tokens.primary : WithAlpha(tokens.border, 0.70f);
+        drawList->AddRect(pos, maxPos, borderColor.ToImU32(), rounding, ImDrawFlags_RoundCornersAll,
+                          active ? 1.5f : 1.0f);
+
+        // 占位符：空值且未聚焦时绘制
+        if (options.placeholder != nullptr && options.placeholder[0] != '\0' &&
+            value->empty() && !active)
+        {
+            ImFont* font = ImGui::GetFont();
+            if (font != nullptr)
+            {
+                const float fontSize = ImGui::GetFontSize();
+                const ImVec2 placePos(pos.x + inset, pos.y + (height - fontSize) * 0.5f);
+                drawList->AddText(font, fontSize, placePos,
+                                  WithAlpha(tokens.text, 0.38f).ToImU32(), options.placeholder);
+            }
+        }
+
+        // 焦点回调：跨帧比较上一帧焦点状态（ImGuiStorage 保存，避免堆分配）
+        if (options.onFocus)
+        {
+            const ImGuiID focusKey = ImGui::GetID("##input_focus");
+            const int previous = ImGui::GetStateStorage()->GetInt(focusKey, active ? 1 : 0);
+            const int currentFlag = active ? 1 : 0;
+            if (previous != currentFlag)
+            {
+                ImGui::GetStateStorage()->SetInt(focusKey, currentFlag);
+                options.onFocus(active);
+            }
+        }
+        (void)hovered;
+
+        if (submitted && options.onEnter)
+        {
+            options.onEnter();
+        }
+
+        // 推进光标到控件下方
+        ImGui::SetCursorScreenPos(ImVec2(pos.x, maxPos.y));
+        ImGui::PopID();
+        return edited;
     }
 }

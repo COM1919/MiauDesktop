@@ -8,6 +8,7 @@
 
 #include <cfloat>
 #include <cstdio>
+#include <cstring>
 
 namespace GuiBase
 {
@@ -463,7 +464,143 @@ namespace GuiBase
             clicked = true;
         }
 
+        // === 事件族（mousearea.h:58-81）===
+        // 按下 / 抬起 / 每帧悬浮 / 拖拽累计位移 / 滚轮
+        const bool activated = (!options.disabled) && ImGui::IsItemActivated();
+        const bool deactivated = (!options.disabled) && ImGui::IsItemDeactivated();
+        const bool itemActive = (!options.disabled) && ImGui::IsItemActive();
+
+        if (activated && options.onPress)
+        {
+            options.onPress();
+        }
+        if (deactivated && options.onRelease)
+        {
+            options.onRelease();
+        }
+        if (hovered && options.onHover)
+        {
+            options.onHover();
+        }
+
+        // 拖拽：累计位移存 ImGuiStorage，抬起时清零
+        if (options.onDrag)
+        {
+            const ImGuiID dragKey = ImGui::GetID("##mouse_area_drag");
+            if (activated)
+            {
+                ImGui::GetStateStorage()->SetFloat(dragKey, 0.0f);
+            }
+            if (itemActive)
+            {
+                const ImVec2 delta = ImGui::GetIO().MouseDelta;
+                const float total = ImGui::GetStateStorage()->GetFloat(dragKey, 0.0f) +
+                                    delta.x + delta.y;
+                ImGui::GetStateStorage()->SetFloat(dragKey, total);
+                if (delta.x != 0.0f || delta.y != 0.0f)
+                {
+                    options.onDrag(delta.x, delta.y);
+                }
+            }
+        }
+
+        // 滚轮：仅在悬浮时上报
+        if (hovered && options.onScroll)
+        {
+            const float wheel = ImGui::GetIO().MouseWheel;
+            if (wheel != 0.0f)
+            {
+                options.onScroll(wheel);
+            }
+        }
+
+        // 右键（acceptedButtons）：InvisibleButton 只处理左键，右键单独判定
+        if (options.acceptRightButton && hovered && !options.disabled &&
+            ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+        {
+            if (onClick)
+            {
+                onClick();
+            }
+            clicked = true;
+        }
+
         ImGui::PopID();
         return clicked;
+    }
+
+    // =========================================================================
+    // 文本层级（对应 text.h:13/21/29 的 body / title / subtitle 三档样式）
+    // 复用 GuiText，只是把字号与颜色固定为 EUI pageVisuals 的层级值
+    // =========================================================================
+    void GuiTextBody(const char* label, const char* text, float maxWidth)
+    {
+        const GuiThemeTokens tokens = Theme::Dark();
+        GuiText(label, text, tokens.typography.label, WithAlpha(tokens.text, 0.68f),
+                GuiTextAlign::Left, maxWidth);
+    }
+
+    void GuiTextTitle(const char* label, const char* text, float maxWidth)
+    {
+        const GuiThemeTokens tokens = Theme::Dark();
+        GuiText(label, text, tokens.typography.display, WithAlpha(tokens.text, 0.98f),
+                GuiTextAlign::Left, maxWidth);
+    }
+
+    void GuiTextSubtitle(const char* label, const char* text, float maxWidth)
+    {
+        const GuiThemeTokens tokens = Theme::Dark();
+        GuiText(label, text, tokens.typography.subtitle, WithAlpha(tokens.text, 0.72f),
+                GuiTextAlign::Left, maxWidth);
+    }
+
+    // =========================================================================
+    // Markdown 文档控件
+    // Card 背景 + 滚动视口 + imgui_md 渲染：标题层级由 imgui_md::get_font_size 提供，
+    // 走 ImGui 1.92 的动态字号烘焙（单一字体文件），不加载多份字号字体
+    // =========================================================================
+    bool GuiMarkdown(const char* label, const char* markdownText, float* offset,
+                     const ImVec2& size, const GuiCardStyle& style)
+    {
+        if (markdownText == nullptr || size.x <= 0.0f || size.y <= 0.0f)
+        {
+            return false;
+        }
+
+        const ImVec2 pos = ImGui::GetCursorScreenPos();
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+        // Card 背景：阴影 → 填充 → 边框
+        DrawGuiCardBackground(drawList, pos, size, style);
+
+        const float padding = std::max(0.0f, style.padding);
+        const ImVec2 contentPos(pos.x + padding, pos.y + padding);
+        const ImVec2 contentSize(std::max(0.0f, size.x - padding * 2.0f),
+                                 std::max(0.0f, size.y - padding * 2.0f));
+
+        ImGui::PushID(label != nullptr ? label : "##gui_markdown");
+        if (contentSize.x > 8.0f && contentSize.y > 8.0f)
+        {
+            ImGui::SetCursorScreenPos(contentPos);
+            float localOffset = (offset != nullptr) ? *offset : 0.0f;
+            if (BeginGuiScrollView("##markdown_scroll", contentSize, &localOffset))
+            {
+                // 单个 imgui_md 实例复用：解析状态在 print 内部重置，不产生跨帧累积分配
+                static imgui_md s_markdown;
+                ImGui::PushTextWrapPos(contentSize.x - 8.0f);
+                s_markdown.print(markdownText, markdownText + std::strlen(markdownText));
+                ImGui::PopTextWrapPos();
+            }
+            EndGuiScrollView();
+            if (offset != nullptr)
+            {
+                *offset = localOffset;
+            }
+        }
+
+        // 推进光标到卡片下方
+        ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + size.y));
+        ImGui::PopID();
+        return true;
     }
 }

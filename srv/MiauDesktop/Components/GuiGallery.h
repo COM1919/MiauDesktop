@@ -174,6 +174,143 @@ protected:
                                &m_slideIndex, ImVec2(std::max(300.0f, fullWidth - 250.0f), 240.0f));
 
         // =========================================================================
+        // 参数级变体（EUI Builder 开关：图标/禁用、进制步进、多行输入、
+        // 多级菜单、Toast 标题、Tooltip 绑定、图文轮播、卡片轮播参数、Markdown）
+        // =========================================================================
+        ImGui::TextDisabled("参数级变体（GuiButtonEx / GuiStepperEx / GuiInputTextEx / GuiContextMenuTree…）");
+
+        GuiBase::GuiButtonEx("保存##variant_save", ImVec2(116.0f, 34.0f), ICON_FA_CIRCLE_CHECK, false);
+        ImGui::SameLine();
+        GuiBase::GuiButtonEx("禁用##variant_disabled", ImVec2(116.0f, 34.0f), ICON_FA_XMARK, true);
+        ImGui::SameLine();
+        GuiBase::GuiButtonEx(ICON_FA_GEAR, ImVec2(40.0f, 34.0f), ICON_FA_GEAR, false);
+
+        // 十六进制步进器（base / bitWidth / 前缀 / 大写）
+        GuiBase::GuiStepperOptions stepperOptions;
+        stepperOptions.step = 16;
+        stepperOptions.minValue = 0;
+        stepperOptions.maxValue = 0xFFFF;
+        stepperOptions.base = 16;
+        stepperOptions.bitWidth = 16;
+        stepperOptions.showBasePrefix = true;
+        stepperOptions.uppercase = true;
+        GuiBase::GuiStepperEx("##variant_stepper", &m_stepperValue, stepperOptions);
+        ImGui::SameLine();
+        ImGui::Text("步进器值 = %d", m_stepperValue);
+
+        // 多行输入 + 占位符
+        GuiBase::GuiInputOptions inputOptions;
+        inputOptions.multiline = true;
+        inputOptions.visibleLines = 3;
+        inputOptions.placeholder = "多行输入，支持滚轮滚动（GuiInputTextEx）";
+        GuiBase::GuiInputTextEx("##variant_input", &m_inputText, ImVec2(fullWidth, 0.0f), inputOptions);
+
+        // 时间选择器：5 分钟步进
+        GuiBase::GuiTimePicker("##variant_time", &m_hour, &m_minute, 5);
+        ImGui::SameLine();
+        ImGui::Text("%02d:%02d（5 分钟步进）", m_hour, m_minute);
+
+        // 对话框变体（次级按钮 + 内容回调）
+        if (GuiBase::GuiButton("打开对话框##variant_dialog", ImVec2(150.0f, 34.0f)))
+        {
+            m_dialogOpen = true;
+        }
+        ImGui::SameLine();
+        if (GuiBase::GuiButton("弹出 Toast##variant_toast", ImVec2(150.0f, 34.0f)))
+        {
+            m_toastUntil = ImGui::GetTime() + 2.6;
+        }
+        ImGui::SameLine();
+        ImGui::Text("多级菜单选中值：%d", m_menuValue);
+
+        // 多级右键菜单（在下方按钮区域右键）
+        GuiBase::GuiButton("在此按钮上右键##variant_ctx", ImVec2(200.0f, 34.0f));
+        GuiBase::GuiTooltipFor("##variant_tip", "GuiTooltipFor：绑定到上一个控件");
+        {
+            static const GuiBase::GuiMenuItem exportItems[] = {
+                { "导出 PNG", nullptr, 0, 101 },
+                { "导出 SVG", nullptr, 0, 102 },
+            };
+            static const GuiBase::GuiMenuItem menuItems[] = {
+                { "新建", nullptr, 0, 1 },
+                { "导出", exportItems, 2, -1 },
+                { "删除", nullptr, 0, 3 },
+            };
+            GuiBase::GuiContextMenuTree("##variant_menu", menuItems, 3, &m_menuValue);
+        }
+
+        // 图文轮播（堆叠参数）
+        {
+            static const GuiBase::GuiCarouselItem carouselItems[] = {
+                { "晨光", "Morning", nullptr },
+                { "午后", "Noon", nullptr },
+                { "黄昏", "Dusk", nullptr },
+            };
+            GuiBase::GuiCarouselEx("##variant_carousel", carouselItems, 3, &m_carouselIndex,
+                                   fullWidth, 200.0f);
+        }
+
+        // 文本层级
+        GuiBase::GuiTextTitle("##variant_title", "GuiTextTitle 标题层级");
+        GuiBase::GuiTextSubtitle("##variant_subtitle", "GuiTextSubtitle 副标题层级");
+        GuiBase::GuiTextBody("##variant_body",
+                             "GuiTextBody 正文层级：超宽自动换行，字号与颜色取自主题令牌。", fullWidth);
+
+        // Markdown 文档控件（单一字体 + 动态字号）
+        static const char* kMarkdownSample =
+            "# 一级标题\n"
+            "## 二级标题\n"
+            "### 三级标题\n\n"
+            "正文段落：单一字体文件 + ImGui 动态字号烘焙，不需要为每个字号加载字体。\n\n"
+            "- 列表项一\n"
+            "- 列表项二\n\n"
+            "| 列 A | 列 B |\n"
+            "| --- | --- |\n"
+            "| 1 | 2 |\n\n"
+            "```cpp\nint main() { return 0; }\n```\n";
+        GuiBase::GuiMarkdown("##variant_markdown", kMarkdownSample, &m_markdownOffset,
+                             ImVec2(fullWidth, 220.0f));
+
+        // 卡片轮播变体（间距 / 倾斜 / 背景开关）
+        {
+            GuiBase::GuiCardSliderOptions sliderOptions;
+            sliderOptions.cardSpacing = 8.0f;
+            sliderOptions.tilt = true;
+            sliderOptions.background = true;
+            static const char* variantTitles[] = { "晨光", "午后", "黄昏", "夜色" };
+            static const char* variantSubtitles[] = { "Morning", "Noon", "Dusk", "Night" };
+            GuiBase::GuiCardSliderEx("##variant_slider", nullptr, variantTitles, variantSubtitles, 4,
+                                     &m_slideIndex, ImVec2(fullWidth, 240.0f), sliderOptions);
+        }
+
+        // Toast 变体：按时间窗口显示
+        if (ImGui::GetTime() < m_toastUntil)
+        {
+            GuiBase::GuiToastOptions toastOptions;
+            toastOptions.title = "已保存";
+            toastOptions.icon = ICON_FA_CIRCLE_CHECK;
+            GuiBase::GuiToastEx("变体 Toast：带标题、图标与关闭按钮", 2.5f, toastOptions);
+        }
+
+        // 对话框变体：次级按钮 + 内容回调
+        {
+            GuiBase::GuiDialogOptions dialogOptions;
+            dialogOptions.primaryText = "确认";
+            dialogOptions.secondaryText = "取消";
+            dialogOptions.content = []()
+            {
+                static const size_t kItemCount = 3;
+                const char* items[kItemCount] = { "保留组件配置", "清理缓存", "重启设置服务" };
+                for (size_t index = 0; index < kItemCount; ++index)
+                {
+                    ImGui::Text("- %s", items[index]);
+                }
+            };
+            GuiBase::GuiDialogEx("变体对话框", &m_dialogOpen, "带次级按钮与自定义内容的对话框。",
+                                 dialogOptions);
+        }
+
+        // =========================================================================
         // 抽屉（最后绘制，保证处于最上层）
         // =========================================================================
         const ImVec2 savedCursor = ImGui::GetCursorScreenPos();
@@ -205,4 +342,15 @@ private:
     int m_mouseClicks = 0;
     bool m_heartLiked = true;
     int m_slideIndex = 0;
+
+    // 参数级变体演示状态
+    std::string m_inputText;
+    int m_stepperValue = 255;
+    int m_hour = 9;
+    int m_minute = 30;
+    bool m_dialogOpen = false;
+    int m_menuValue = -1;
+    double m_toastUntil = 0.0;
+    int m_carouselIndex = 0;
+    float m_markdownOffset = 0.0f;
 };

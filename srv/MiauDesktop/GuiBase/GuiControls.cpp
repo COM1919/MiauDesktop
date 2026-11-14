@@ -851,4 +851,260 @@ namespace GuiBase
         ImGui::PopID();
         return changed;
     }
+
+    // =========================================================================
+    // 按钮变体（EUI button.h:51-52/65/70：前置图标 / 禁用态 / 按压缩放）
+    // 图标与文字作为一个整体在按钮内居中；禁用态整体降 alpha 且不响应交互
+    // =========================================================================
+    bool GuiButtonEx(const char* label, const ImVec2& size, const char* icon,
+                     bool disabled, float pressScale)
+    {
+        GuiThemeTokens tokens = Theme::Dark();
+        const float width = size.x > 0.0f ? size.x : 120.0f;
+        const float height = size.y > 0.0f ? size.y : 36.0f;
+        const float rounding = tokens.radius.control;
+
+        ImGui::PushID(label);
+        const ImVec2 pos = ImGui::GetCursorScreenPos();
+
+        bool clicked = false;
+        bool hovered = false;
+        bool active = false;
+        if (disabled)
+        {
+            // 禁用态仍占位，避免后续布局跳动
+            ImGui::Dummy(ImVec2(width, height));
+        }
+        else
+        {
+            clicked = ImGui::InvisibleButton("##gui_button_ex", ImVec2(width, height));
+            hovered = ImGui::IsItemHovered();
+            active = ImGui::IsItemActive();
+        }
+
+        // 三态背景：normal / hover（变亮）/ active（变暗）
+        GuiColor bg = tokens.surface;
+        if (active)
+        {
+            bg = ActiveColor(tokens, tokens.surface);
+        }
+        else if (hovered)
+        {
+            bg = HoverColor(tokens, tokens.surface);
+        }
+
+        // 按压缩放（button.h:70 pressScale）：绕按钮中心缩放
+        const float scale = active ? std::clamp(pressScale, 0.90f, 1.0f) : 1.0f;
+        const ImVec2 center(pos.x + width * 0.5f, pos.y + height * 0.5f);
+        const ImVec2 halfSize(width * 0.5f * scale, height * 0.5f * scale);
+        const ImVec2 min(center.x - halfSize.x, center.y - halfSize.y);
+        const ImVec2 max(center.x + halfSize.x, center.y + halfSize.y);
+
+        const float alphaScale = disabled ? 0.45f : 1.0f;
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        drawList->AddRectFilled(min, max, WithAlpha(bg, bg.a * alphaScale).ToImU32(), rounding);
+        drawList->AddRect(min, max, WithAlpha(tokens.border, 0.70f * alphaScale).ToImU32(),
+                          rounding, ImDrawFlags_RoundCornersAll, 1.0f);
+
+        // 图标 + 文字作为整体居中
+        const std::string displayText = DisplayLabelText(label);
+        ImFont* font = ImGui::GetFont();
+        const float fontSize = ImGui::GetFontSize();
+        const float iconFontSize = fontSize * 1.05f;
+        const bool hasIcon = (icon != nullptr && icon[0] != '\0' && font != nullptr);
+        const bool hasText = (!displayText.empty() && font != nullptr);
+
+        const ImVec2 iconExtent = hasIcon ? font->CalcTextSizeA(iconFontSize, FLT_MAX, 0.0f, icon)
+                                          : ImVec2(0.0f, 0.0f);
+        const ImVec2 textExtent = hasText ? font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, displayText.c_str())
+                                          : ImVec2(0.0f, 0.0f);
+        const float gap = (hasIcon && hasText) ? tokens.spacing.small : 0.0f;
+        const float contentWidth = iconExtent.x + gap + textExtent.x;
+
+        const ImU32 textColor = WithAlpha(tokens.text, alphaScale).ToImU32();
+        float cursorX = center.x - contentWidth * 0.5f;
+        if (hasIcon)
+        {
+            drawList->AddText(font, iconFontSize,
+                              ImVec2(cursorX, center.y - iconExtent.y * 0.5f), textColor, icon);
+            cursorX += iconExtent.x + gap;
+        }
+        if (hasText)
+        {
+            drawList->AddText(font, fontSize,
+                              ImVec2(cursorX, center.y - textExtent.y * 0.5f), textColor,
+                              displayText.c_str());
+        }
+
+        ImGui::PopID();
+        return clicked;
+    }
+
+    // =========================================================================
+    // 步进器变体（EUI stepper.h:61-66：进制 / 补零 / 位宽 / 前缀 / 大写）
+    // 值按 base 格式化显示，- / + 按钮按 step 增减并 clamp 到 [minValue, maxValue]
+    // =========================================================================
+    bool GuiStepperEx(const char* label, int* value, const GuiStepperOptions& options)
+    {
+        if (value == nullptr)
+        {
+            return false;
+        }
+
+        GuiThemeTokens tokens = Theme::Dark();
+        const float width = 180.0f;
+        const float height = 34.0f;
+        const float buttonWidth = 32.0f;
+        const int base = (options.base == 2 || options.base == 8 || options.base == 16) ? options.base : 10;
+        const int minValue = std::min(options.minValue, options.maxValue);
+        const int maxValue = std::max(options.minValue, options.maxValue);
+
+        ImGui::PushID(label);
+        const ImVec2 pos = ImGui::GetCursorScreenPos();
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+        // === 值格式化：进制 → 位宽/位数补零 → 前缀 → 大写 ===
+        char valueText[64];
+        {
+            char digits[40];
+            int digitCount = 0;
+            const long long signedValue = static_cast<long long>(*value);
+            const bool negative = (signedValue < 0);
+            unsigned long long magnitude = negative
+                                               ? static_cast<unsigned long long>(-signedValue)
+                                               : static_cast<unsigned long long>(signedValue);
+            do
+            {
+                const int digit = static_cast<int>(magnitude % static_cast<unsigned long long>(base));
+                digits[digitCount++] = static_cast<char>(digit < 10
+                                                            ? ('0' + digit)
+                                                            : ((options.uppercase ? 'A' : 'a') + digit - 10));
+                magnitude /= static_cast<unsigned long long>(base);
+            } while (magnitude > 0 && digitCount < 39);
+
+            // 目标位数：digits 优先，其次按 bitWidth 换算（2/8/16 进制）
+            int targetDigits = options.digits;
+            if (targetDigits <= 0 && options.bitWidth > 0 && (base == 2 || base == 8 || base == 16))
+            {
+                int bitsPerDigit = 1;
+                while ((1 << bitsPerDigit) < base)
+                {
+                    ++bitsPerDigit;
+                }
+                targetDigits = (options.bitWidth + bitsPerDigit - 1) / bitsPerDigit;
+            }
+
+            int writePos = 0;
+            if (options.showBasePrefix)
+            {
+                if (base == 2)
+                {
+                    valueText[writePos++] = '0';
+                    valueText[writePos++] = 'b';
+                }
+                else if (base == 8)
+                {
+                    valueText[writePos++] = '0';
+                    valueText[writePos++] = 'o';
+                }
+                else if (base == 16)
+                {
+                    valueText[writePos++] = '0';
+                    valueText[writePos++] = options.uppercase ? 'X' : 'x';
+                }
+            }
+            if (negative)
+            {
+                valueText[writePos++] = '-';
+            }
+            for (int pad = digitCount; pad < targetDigits; ++pad)
+            {
+                valueText[writePos++] = '0';
+            }
+            for (int index = digitCount - 1; index >= 0; --index)
+            {
+                valueText[writePos++] = digits[index];
+            }
+            valueText[writePos] = '\0';
+        }
+
+        // === 交互：左侧减号 / 右侧加号 ===
+        ImGui::PushID("##gui_stepper_minus");
+        ImGui::SetCursorScreenPos(pos);
+        const bool minusClicked = ImGui::InvisibleButton("##minus", ImVec2(buttonWidth, height));
+        const bool minusHovered = ImGui::IsItemHovered();
+        ImGui::PopID();
+
+        ImGui::PushID("##gui_stepper_plus");
+        ImGui::SetCursorScreenPos(ImVec2(pos.x + width - buttonWidth, pos.y));
+        const bool plusClicked = ImGui::InvisibleButton("##plus", ImVec2(buttonWidth, height));
+        const bool plusHovered = ImGui::IsItemHovered();
+        ImGui::PopID();
+
+        // === 外观：底 surface + 边框 + 按钮 hover 高亮 + 居中数值 ===
+        const float rounding = tokens.radius.control;
+        const ImVec2 maxPos(pos.x + width, pos.y + height);
+        drawList->AddRectFilled(pos, maxPos, tokens.surface.ToImU32(), rounding);
+        drawList->AddRect(pos, maxPos, WithAlpha(tokens.border, 0.70f).ToImU32(),
+                          rounding, ImDrawFlags_RoundCornersAll, 1.0f);
+
+        const ImU32 hoverColor = WithAlpha(tokens.surfaceHover, 0.85f).ToImU32();
+        if (minusHovered)
+        {
+            drawList->AddRectFilled(pos, ImVec2(pos.x + buttonWidth, maxPos.y), hoverColor,
+                                    rounding, ImDrawFlags_RoundCornersLeft);
+        }
+        if (plusHovered)
+        {
+            drawList->AddRectFilled(ImVec2(maxPos.x - buttonWidth, pos.y), maxPos, hoverColor,
+                                    rounding, ImDrawFlags_RoundCornersRight);
+        }
+
+        ImFont* font = ImGui::GetFont();
+        if (font != nullptr)
+        {
+            const float iconSize = tokens.typography.body;
+            const char* minusIcon = ICON_FA_MINUS;
+            const char* plusIcon = ICON_FA_PLUS;
+            const ImVec2 minusExtent = font->CalcTextSizeA(iconSize, FLT_MAX, 0.0f, minusIcon);
+            const ImVec2 plusExtent = font->CalcTextSizeA(iconSize, FLT_MAX, 0.0f, plusIcon);
+            drawList->AddText(font, iconSize,
+                              ImVec2(pos.x + (buttonWidth - minusExtent.x) * 0.5f,
+                                     pos.y + (height - minusExtent.y) * 0.5f),
+                              tokens.text.ToImU32(), minusIcon);
+            drawList->AddText(font, iconSize,
+                              ImVec2(maxPos.x - buttonWidth + (buttonWidth - plusExtent.x) * 0.5f,
+                                     pos.y + (height - plusExtent.y) * 0.5f),
+                              tokens.text.ToImU32(), plusIcon);
+
+            const float valueFontSize = tokens.typography.option;
+            const ImVec2 valueExtent = font->CalcTextSizeA(valueFontSize, FLT_MAX, 0.0f, valueText);
+            drawList->AddText(font, valueFontSize,
+                              ImVec2(pos.x + (width - valueExtent.x) * 0.5f,
+                                     pos.y + (height - valueExtent.y) * 0.5f),
+                              tokens.text.ToImU32(), valueText);
+        }
+
+        // 推进光标到控件下方
+        ImGui::SetCursorScreenPos(ImVec2(pos.x, maxPos.y));
+        ImGui::PopID();
+
+        // === 数值更新 ===
+        bool changed = false;
+        int next = *value;
+        if (minusClicked)
+        {
+            next -= options.step;
+        }
+        if (plusClicked)
+        {
+            next += options.step;
+        }
+        if (next != *value)
+        {
+            *value = std::clamp(next, minValue, maxValue);
+            changed = true;
+        }
+        return changed;
+    }
 }

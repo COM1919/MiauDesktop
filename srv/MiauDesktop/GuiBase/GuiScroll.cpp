@@ -196,6 +196,8 @@ namespace GuiBase
             ImVec2 size;                // 视口尺寸
             float contentTopLocal = 0.0f; // 内容起点（子窗口局部坐标 Y）
             float barWidth = 0.0f;      // 已扣除的滚动条宽度
+            float barGap = 4.0f;        // 滚动条与内容的间隙
+            float wheelStep = 48.0f;    // 滚轮单格步进
             GuiScrollStyle style;
             bool pushed = false;        // 是否压入了样式变量（需要成对 Pop）
         };
@@ -425,7 +427,8 @@ namespace GuiBase
     // End 按内容高度绘制滚动条、处理滚轮并 clamp offset
     // =========================================================================
     bool BeginGuiScrollView(const char* label, const ImVec2& size, float* offset,
-                            const GuiScrollStyle& style, ImGuiWindowFlags flags)
+                            const GuiScrollStyle& style, ImGuiWindowFlags flags,
+                            const GuiVirtualScrollOptions& scrollOptions)
     {
         if (offset == nullptr || size.x <= 0.0f || size.y <= 0.0f)
         {
@@ -433,7 +436,11 @@ namespace GuiBase
         }
 
         const ImVec2 pos = ImGui::GetCursorScreenPos();
-        const float barWidth = style.thickness;
+        // 滚动条宽度 / 间隙 / 滚轮步进都可由 scrollOptions 覆盖（scrollview.h:38-40/83）
+        const float barWidth = (scrollOptions.scrollbarWidth > 0.0f) ? scrollOptions.scrollbarWidth
+                                                                    : style.thickness;
+        const float barGap = std::max(0.0f, scrollOptions.scrollbarGap);
+        const float wheelStep = (scrollOptions.wheelStep > 0.0f) ? scrollOptions.wheelStep : kWheelStep;
         const ImGuiID viewId = ImGui::GetID(label != nullptr ? label : "##gui_scrollview");
 
         // 用上一帧测得的内容高度决定是否预留滚动条宽度：
@@ -441,7 +448,7 @@ namespace GuiBase
         const float cachedContentHeight =
             ImGui::GetStateStorage()->GetFloat(viewId ^ kSaltContentHeight, 0.0f);
         const bool reservingBar = (cachedContentHeight > size.y + 0.5f);
-        const float contentWidth = std::max(10.0f, size.x - (reservingBar ? (barWidth + kBarGap) : 0.0f));
+        const float contentWidth = std::max(10.0f, size.x - (reservingBar ? (barWidth + barGap) : 0.0f));
 
         // 子窗口内不额外留白，滚动完全由滚动条驱动
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
@@ -461,6 +468,8 @@ namespace GuiBase
             state.pos = pos;
             state.size = size;
             state.barWidth = barWidth;
+            state.barGap = barGap;
+            state.wheelStep = wheelStep;
             state.style = style;
             state.contentTopLocal = ImGui::GetCursorPosY();
             state.pushed = true;
@@ -522,7 +531,7 @@ namespace GuiBase
             const float wheel = ImGui::GetIO().MouseWheel;
             if (wheel != 0.0f)
             {
-                current = std::clamp(current - wheel * kWheelStep, 0.0f, maxOffset);
+                current = std::clamp(current - wheel * local.wheelStep, 0.0f, maxOffset);
             }
         }
 
@@ -531,7 +540,7 @@ namespace GuiBase
         {
             const ImVec2 barMin(local.pos.x + local.size.x - local.barWidth, local.pos.y);
             DrawScrollBarAt(local.id ^ 0x5BF03635u, &current, viewportHeight, contentHeight,
-                            barMin, viewMax, false, local.style, tokens, kWheelStep);
+                            barMin, viewMax, false, local.style, tokens, local.wheelStep);
         }
 
         *local.offset = current;
@@ -543,7 +552,8 @@ namespace GuiBase
     // =========================================================================
     GuiVirtualRange GuiVirtualList(const char* label, const ImVec2& size, int itemCount,
                                    float rowHeight, float* offset, float overscanRows,
-                                   const GuiScrollStyle& style)
+                                   const GuiScrollStyle& style,
+                                   const GuiVirtualScrollOptions& scrollOptions)
     {
         GuiVirtualRange range;
         if (offset == nullptr || size.x <= 0.0f || size.y <= 0.0f)
@@ -552,6 +562,12 @@ namespace GuiBase
         }
 
         GuiThemeTokens tokens = Theme::Dark(); // 每帧仅取一次令牌
+
+        // 滚动条宽度 / 间隙 / 滚轮步进可由 scrollOptions 覆盖（virtuallist.h:42-45/83）
+        const float barWidth = (scrollOptions.scrollbarWidth > 0.0f) ? scrollOptions.scrollbarWidth
+                                                                    : style.thickness;
+        const float barGap = std::max(0.0f, scrollOptions.scrollbarGap);
+        const float wheelStep = (scrollOptions.wheelStep > 0.0f) ? scrollOptions.wheelStep : kWheelStep;
 
         const int safeItemCount = std::max(0, itemCount);
         const float row = std::max(1.0f, rowHeight);
@@ -564,7 +580,7 @@ namespace GuiBase
         const bool scrollable = maxOffset > 0.0f;
 
         // 行内容区右边界扣除滚动条，避免行背景/命中区覆盖滚动条
-        const float contentRight = maxPos.x - (scrollable ? (style.thickness + kBarGap) : 0.0f);
+        const float contentRight = maxPos.x - (scrollable ? (barWidth + barGap) : 0.0f);
 
         range.min = pos;
         range.max = ImVec2(contentRight, maxPos.y);
@@ -579,16 +595,26 @@ namespace GuiBase
             const float wheel = ImGui::GetIO().MouseWheel;
             if (wheel != 0.0f)
             {
-                current = std::clamp(current - wheel * kWheelStep, 0.0f, maxOffset);
+                current = std::clamp(current - wheel * wheelStep, 0.0f, maxOffset);
             }
         }
 
         // 滚动条
         if (scrollable)
         {
-            const ImVec2 barMin(maxPos.x - style.thickness, pos.y);
+            const ImVec2 barMin(maxPos.x - barWidth, pos.y);
             DrawScrollBarAt(ImGui::GetID("##gui_vl_bar"), &current, size.y, totalHeight,
-                            barMin, maxPos, false, style, tokens, kWheelStep);
+                            barMin, maxPos, false, style, tokens, wheelStep);
+        }
+
+        // 触底回调（virtualmasonry.h:47 同款语义，虚拟列表同样支持）
+        if (scrollOptions.onEndReached && maxOffset > 0.0f)
+        {
+            const float threshold = maxOffset - size.y * std::max(0.0f, scrollOptions.endReachedThreshold);
+            if (current >= threshold)
+            {
+                scrollOptions.onEndReached();
+            }
         }
 
         // 可见区间（virtuallist.h:85-102）：first/last 为闭区间
@@ -703,7 +729,8 @@ namespace GuiBase
     GuiMasonryRange GuiVirtualMasonry(const char* label, const ImVec2& size, int itemCount,
                                       int columns, float gap, float* offset,
                                       const std::function<float(int, float)>& heightOf,
-                                      float overscanRows, const GuiScrollStyle& style)
+                                      float overscanRows, const GuiScrollStyle& style,
+                                      const GuiVirtualScrollOptions& scrollOptions)
     {
         GuiMasonryRange range;
         if (offset == nullptr || size.x <= 0.0f || size.y <= 0.0f)
@@ -716,7 +743,12 @@ namespace GuiBase
         const int safeItemCount = std::max(0, itemCount);
         const int safeColumns = std::max(1, columns);
         const float safeGap = std::max(0.0f, gap);
-        const float barWidth = style.thickness + kBarGap;
+        // 滚动条宽度 / 间隙 / 滚轮步进可由 scrollOptions 覆盖（virtualmasonry.h:51-52）
+        const float scrollbarThickness =
+            (scrollOptions.scrollbarWidth > 0.0f) ? scrollOptions.scrollbarWidth : style.thickness;
+        const float barGap = std::max(0.0f, scrollOptions.scrollbarGap);
+        const float wheelStep = (scrollOptions.wheelStep > 0.0f) ? scrollOptions.wheelStep : kWheelStep;
+        const float barWidth = scrollbarThickness + barGap;
         const float contentWidth = std::max(10.0f, size.x - barWidth);
 
         const ImVec2 pos = ImGui::GetCursorScreenPos();
@@ -753,16 +785,26 @@ namespace GuiBase
             const float wheel = ImGui::GetIO().MouseWheel;
             if (wheel != 0.0f)
             {
-                current = std::clamp(current - wheel * kWheelStep, 0.0f, maxOffset);
+                current = std::clamp(current - wheel * wheelStep, 0.0f, maxOffset);
             }
         }
 
         // 滚动条
         if (maxOffset > 0.0f)
         {
-            const ImVec2 barMin(maxPos.x - style.thickness, pos.y);
+            const ImVec2 barMin(maxPos.x - scrollbarThickness, pos.y);
             DrawScrollBarAt(ImGui::GetID("##gui_masonry_bar"), &current, size.y, totalHeight,
-                            barMin, maxPos, false, style, tokens, kWheelStep);
+                            barMin, maxPos, false, style, tokens, wheelStep);
+        }
+
+        // 触底回调（virtualmasonry.h:47/70）：距底部不足阈值视口高度时触发
+        if (scrollOptions.onEndReached && maxOffset > 0.0f)
+        {
+            const float threshold = maxOffset - size.y * std::max(0.0f, scrollOptions.endReachedThreshold);
+            if (current >= threshold)
+            {
+                scrollOptions.onEndReached();
+            }
         }
 
         range.min = pos;

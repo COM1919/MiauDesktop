@@ -293,7 +293,17 @@ void imgui_md::set_href(bool e, const MD_ATTRIBUTE& src)
 void imgui_md::set_font(bool e)
 {
 	if (e) {
+#if defined(IMGUI_VERSION_NUM) && IMGUI_VERSION_NUM >= 19200
+		// ImGui 1.92+：字体按需烘焙任意字号，标题层级不再需要单独加载字体文件
+		const float font_size = get_font_size();
+		if (font_size > 0.0f) {
+			ImGui::PushFont(get_font(), font_size);
+		} else {
+			ImGui::PushFont(get_font());
+		}
+#else
 		ImGui::PushFont(get_font());
+#endif
 	} else {
 		ImGui::PopFont();
 		ImGui::SetWindowFontScale(1.0f);
@@ -776,6 +786,39 @@ ImFont* imgui_md::get_font() const
 #endif
 
 };
+
+float imgui_md::get_font_size() const
+{
+	// 基准字号：1.92+ 优先用 FontSizeBase（不受嵌套 PushFont 影响，避免层级相乘）
+#if defined(IMGUI_VERSION_NUM) && IMGUI_VERSION_NUM >= 19200
+	const float base = ImGui::GetStyle().FontSizeBase > 0.0f ? ImGui::GetStyle().FontSizeBase
+	                                                        : ImGui::GetFontSize();
+#else
+	const float base = ImGui::GetFontSize();
+#endif
+	if (base <= 0.0f) {
+		return 0.0f;
+	}
+
+	// 标题层级比例：与 EUI-NEO markdown.h:298-306 的层级关系一致（h1 最大、逐级递减）
+	switch (m_hlevel) {
+	case 1: return base * 1.80f;
+	case 2: return base * 1.45f;
+	case 3: return base * 1.25f;
+	case 4: return base * 1.12f;
+	case 5: return base * 1.06f;
+	case 6: return base * 1.02f;
+	default: break;
+	}
+
+	// 代码块略小一号，与正文区分
+	if (m_is_code) {
+		return base * 0.94f;
+	}
+
+	// 0 表示沿用当前字号（正文）
+	return 0.0f;
+}
 
 ImVec4 imgui_md::get_color() const
 {

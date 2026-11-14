@@ -81,4 +81,72 @@ namespace GuiBase
             return t;
         }
     }
+
+    // =========================================================================
+    // 语义化主题组合（对应 theme.h:181-270 的 pageVisuals / fieldVisuals /
+    // buttonHover / buttonPressed / popupShadow）
+    // 与 EUI 一致：由基础令牌推导页面 / 表单 / 按钮三组派生值，避免各控件重复计算
+    // =========================================================================
+    GuiPageVisualTokens GuiPageVisuals(const GuiThemeTokens& tokens)
+    {
+        GuiPageVisualTokens visuals;
+        visuals.titleColor = WithAlpha(tokens.text, 0.98f);
+        visuals.subtitleColor = WithAlpha(tokens.text, 0.72f);
+        visuals.bodyColor = WithAlpha(tokens.text, 0.68f);
+        visuals.cardColor = tokens.surface;
+        visuals.mutedCardColor = tokens.surfaceHover;
+        visuals.softAccentColor = WithAlpha(tokens.primary, 0.16f);
+        visuals.headerTopInset = tokens.spacing.panel;
+        visuals.headerTitleGap = tokens.spacing.header;
+        visuals.headerContentGap = tokens.spacing.page;
+        visuals.headerTitleSize = tokens.typography.display;
+        visuals.headerSubtitleSize = tokens.typography.subtitle;
+        visuals.sectionGap = tokens.spacing.section;
+        visuals.sectionInset = tokens.spacing.large;
+        visuals.sectionRounding = tokens.radius.section;
+        visuals.labelSize = tokens.typography.input;
+        visuals.fieldHeight = tokens.control.field;
+        return visuals;
+    }
+
+    GuiFieldVisualTokens GuiFieldVisuals(const GuiThemeTokens& tokens)
+    {
+        GuiFieldVisualTokens visuals;
+        visuals.rounding = tokens.radius.small;
+        visuals.horizontalInset = tokens.spacing.control;
+        visuals.focusLineHeight = tokens.spacing.micro;
+        visuals.borderLineHeight = tokens.spacing.hairline;
+        visuals.popupRounding = tokens.radius.popup;
+        visuals.popupOverlap = tokens.spacing.hairline;
+        visuals.popupShadowColor = tokens.isDark ? GuiColor(0.0f, 0.0f, 0.0f, 0.28f)
+                                                : GuiColor(0.10f, 0.14f, 0.22f, 0.14f);
+        visuals.popupShadowBlur = tokens.isDark ? 18.0f : 12.0f;
+        visuals.popupShadowOffsetY = tokens.isDark ? 8.0f : 5.0f;
+        return visuals;
+    }
+
+    GuiColor GuiButtonHoverColor(const GuiThemeTokens& tokens, const GuiColor& base)
+    {
+        return tokens.isDark
+                   ? MixColor(base, GuiColor(1.0f, 1.0f, 1.0f, base.a), 0.16f)
+                   : MixColor(base, tokens.primary, 0.10f);
+    }
+
+    GuiColor GuiButtonPressedColor(const GuiThemeTokens& tokens, const GuiColor& base)
+    {
+        return tokens.isDark
+                   ? MixColor(base, GuiColor(0.0f, 0.0f, 0.0f, base.a), 0.34f)
+                   : MixColor(base, tokens.surfaceActive, 0.22f);
+    }
+
+    GuiShadowStyle GuiPopupShadow(const GuiThemeTokens& tokens)
+    {
+        const GuiFieldVisualTokens field = GuiFieldVisuals(tokens);
+        GuiShadowStyle shadow;
+        shadow.blur = field.popupShadowBlur;
+        shadow.offsetX = 0.0f;
+        shadow.offsetY = field.popupShadowOffsetY;
+        shadow.color = field.popupShadowColor;
+        return shadow;
+    }
 }
