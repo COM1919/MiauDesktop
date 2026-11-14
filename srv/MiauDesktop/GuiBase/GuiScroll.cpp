@@ -36,6 +36,7 @@ namespace GuiBase
         constexpr ImGuiID kSaltBarGrab = 0x165667B1u;
         constexpr ImGuiID kSaltBarHover = 0x85EBCA6Bu;
         constexpr ImGuiID kSaltRowHover = 0x27D4EB2Fu;
+        constexpr ImGuiID kSaltContentHeight = 0x9E3779B9u;
 
         // =========================================================================
         // 通用小工具
@@ -433,7 +434,14 @@ namespace GuiBase
 
         const ImVec2 pos = ImGui::GetCursorScreenPos();
         const float barWidth = style.thickness;
-        const float contentWidth = std::max(10.0f, size.x - barWidth - kBarGap);
+        const ImGuiID viewId = ImGui::GetID(label != nullptr ? label : "##gui_scrollview");
+
+        // 用上一帧测得的内容高度决定是否预留滚动条宽度：
+        // 首帧按全宽布局，第二帧起因内容宽度稳定而不再重排（消除滚动条出现时的抖动）
+        const float cachedContentHeight =
+            ImGui::GetStateStorage()->GetFloat(viewId ^ kSaltContentHeight, 0.0f);
+        const bool reservingBar = (cachedContentHeight > size.y + 0.5f);
+        const float contentWidth = std::max(10.0f, size.x - (reservingBar ? (barWidth + kBarGap) : 0.0f));
 
         // 子窗口内不额外留白，滚动完全由滚动条驱动
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
@@ -448,7 +456,7 @@ namespace GuiBase
         if (g_scrollViewDepth < kScrollViewMaxDepth)
         {
             ScrollViewState& state = g_scrollViewStack[g_scrollViewDepth];
-            state.id = ImGui::GetID(label != nullptr ? label : "##gui_scrollview");
+            state.id = viewId;
             state.offset = offset;
             state.pos = pos;
             state.size = size;
@@ -493,6 +501,9 @@ namespace GuiBase
         {
             ImGui::PopStyleVar(3);
         }
+
+        // 写回内容高度：下一帧 Begin 据此决定是否预留滚动条宽度
+        ImGui::GetStateStorage()->SetFloat(local.id ^ kSaltContentHeight, contentHeight);
 
         if (local.offset == nullptr)
         {

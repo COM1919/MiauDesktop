@@ -60,7 +60,7 @@ namespace GuiBase
         // 底部尖端 (12, 21.847)；用 6 段三次贝塞尔逼近，首点为顶部凹口。
         // =========================================================================
         constexpr int kHeartSegments = 6;
-        constexpr int kHeartStepsPerSegment = 9;
+        constexpr int kHeartStepsPerSegment = 5;
         constexpr int kHeartMaxPoints = kHeartSegments * kHeartStepsPerSegment + 2;
         constexpr float kHeartCenterX = 12.0f;
         constexpr float kHeartCenterY = 11.882f; // (1.917 + 21.847) / 2
@@ -208,14 +208,11 @@ namespace GuiBase
         ImDrawList* drawList = ImGui::GetWindowDrawList();
         if (pointCount >= 3 && heartSize > 1.0f)
         {
-            // 以顶部凹口为锚点做扇形填充（心形相对该点呈星形，三角化不自交）
+            // 凹多边形填充（ImGui 内部三角化），比"以凹口为锚点的扇形近似"更贴合轮廓
             if (*fillAnim > 0.01f)
             {
-                const ImU32 fillColor = WithAlpha(heartColor, *fillAnim).ToImU32();
-                for (int index = 1; index + 1 < pointCount; ++index)
-                {
-                    drawList->AddTriangleFilled(points[0], points[index], points[index + 1], fillColor);
-                }
+                drawList->AddConcavePolyFilled(points, pointCount,
+                                              WithAlpha(heartColor, *fillAnim).ToImU32());
             }
 
             // 描边：未选中时用 muted 心形色，选中时用亮色描边
@@ -530,14 +527,38 @@ namespace GuiBase
         int current = std::clamp(*selectedIndex, 0, count - 1);
         bool changed = false;
 
-        // 位移动画：向当前选中项平滑靠近
+        // 位移动画：沿最短方向平滑靠近当前项（支持首尾环绕，不会整圈回绕）
         float* animSlot = ImGui::GetStateStorage()->GetFloatRef(sliderId ^ 0x51ED2707u,
                                                                static_cast<float>(current));
-        *animSlot = SmoothTowards(*animSlot, static_cast<float>(current), 12.0f);
+        {
+            float delta = static_cast<float>(current) - *animSlot;
+            if (count > 1)
+            {
+                // 把距离归一化到 (-count/2, count/2]，首尾相邻时走最短路径
+                const float cycle = static_cast<float>(count);
+                delta = std::fmod(delta, cycle);
+                if (delta > cycle * 0.5f)
+                {
+                    delta -= cycle;
+                }
+                else if (delta < -cycle * 0.5f)
+                {
+                    delta += cycle;
+                }
+            }
+            const float dt = std::clamp(ImGui::GetIO().DeltaTime, 0.0f, 0.1f);
+            *animSlot += delta * (1.0f - std::exp(-12.0f * dt));
+        }
 
         ImDrawList* drawList = ImGui::GetWindowDrawList();
 
-        // 从最远层向中心绘制，保证中间卡片在最上层
+        // 连续视觉中心：animSlot 可为小数/越界，绘制时按 count 取模映射回真实索引
+        const int visualCenter = static_cast<int>(std::lround(*animSlot));
+        const float fractionalSlot = *animSlot - static_cast<float>(visualCenter);
+
+        // 从最远层向中心绘制，保证中间卡片在最上层；小 count 环绕时用去重表避免重复绘制
+        int drawnIndices[5];
+        int drawnCount = 0;
         for (int depth = 2; depth >= 0; --depth)
         {
             for (int sign = -1; sign <= 1; sign += 2)
@@ -547,15 +568,27 @@ namespace GuiBase
                     continue; // 0 层只画一次（sign = -1 那一轮）
                 }
 
-                const float slot = static_cast<float>(sign * depth) + (*animSlot - static_cast<float>(current));
-                const int index = current + sign * depth;
-                if (index < 0 || index >= count)
+                const int slotIndex = sign * depth;
+                const int index = ((visualCenter + slotIndex) % count + count) % count;
+                const float slot = static_cast<float>(slotIndex) + fractionalSlot;
+
+                // 环绕后可能与已绘制卡片重复（count 小于 5 时），跳过
+                bool duplicated = false;
+                for (int drawn = 0; drawn < drawnCount; ++drawn)
+                {
+                    if (drawnIndices[drawn] == index)
+                    {
+                        duplicated = true;
+                        break;
+                    }
+                }
+                if (duplicated || std::fabs(slot) > 2.5f)
                 {
                     continue;
                 }
-                if (std::fabs(slot) > 2.5f)
+                if (drawnCount < 5)
                 {
-                    continue;
+                    drawnIndices[drawnCount++] = index;
                 }
 
                 // 距离越远越小：中心 1.0，相邻 0.82
@@ -683,14 +716,16 @@ namespace GuiBase
             return arrowClicked;
         };
 
-        if (drawArrow(0, leftCenter, ICON_FA_CHEVRON_LEFT, current > 0))
+        // 箭头始终可用（count > 1 时首尾环绕）
+        const bool wrapEnabled = (count > 1);
+        if (drawArrow(0, leftCenter, ICON_FA_CHEVRON_LEFT, wrapEnabled))
         {
-            --current;
+            current = (current - 1 + count) % count;
             changed = true;
         }
-        if (drawArrow(1, rightCenter, ICON_FA_CHEVRON_RIGHT, current < count - 1))
+        if (drawArrow(1, rightCenter, ICON_FA_CHEVRON_RIGHT, wrapEnabled))
         {
-            ++current;
+            current = (current + 1) % count;
             changed = true;
         }
         if (changed)
