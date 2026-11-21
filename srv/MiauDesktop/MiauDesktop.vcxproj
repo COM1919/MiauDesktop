@@ -201,6 +201,8 @@
     <ClInclude Include="Components\GuiGallery.h" />
     <ClInclude Include="Components\MusicDisplay.h" />
     <ClInclude Include="Components\PerformanceMonitor.h" />
+    <ClInclude Include="Components\WeatherDisplay.h" />
+    <ClInclude Include="Components\TimeDisplay.h" />
     <ClInclude Include="Components\ProcessManager.h" />
     <ClInclude Include="Config\Config.h" />
     <ClInclude Include="Framework.h" />

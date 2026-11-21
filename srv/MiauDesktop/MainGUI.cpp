@@ -60,8 +60,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
     Config::Instance().AddItem("Settings.Animations.Speed", 1.0f);
     Config::Instance().AddItem("Settings.Animations.Ease", 5);   // 5 = OutCubic
     Config::Instance().LoadConfig();
-    // 把配置值分发到各组件变量（注册机制：变量在加载/保存时由配置系统读写）
-    g_compManager.LoadAllConfigs();
+    // 注意：组件在 RenderGui 中创建（此时才注册各自的配置项），
+    //       因此组件配置的加载放在组件注册之后进行（见 RenderGui）
     // 加载全局设置（动画开关 / 速度 / 优先公式）到 AppSettings 缓存
     AppSettings::LoadGlobalSettings();
     // 将全局动画设置注册给 GuiBase::GuiAnimatedProgress（组件动画统一走全局设置）
@@ -188,7 +188,12 @@ int RenderGui(HINSTANCE hInstance)
     g_compManager.AddComponent(std::make_unique<Components::ProcessManager>());
     g_compManager.AddComponent(std::make_unique<Components::DebugDemo>());
     g_compManager.AddComponent(std::make_unique<Components::MusicDisplay>());
+    g_compManager.AddComponent(std::make_unique<Components::WeatherDisplay>());
+    g_compManager.AddComponent(std::make_unique<Components::TimeDisplay>());
     g_compManager.AddComponent(std::make_unique<Components::GuiGallery>());
+
+    // 组件注册完毕后再加载各自配置（配置文件在组件注册前已读入内存）
+    g_compManager.LoadAllConfigs();
 
     // 启动设置服务（命名管道），供独立的 WinUI3 设置程序（MiauSettings.exe）读写设置
     SettingsServer::Start();

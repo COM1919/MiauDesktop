@@ -129,9 +129,6 @@
     <ClCompile Include="AppSettings\Appsettings.cpp">
       <Filter>源文件\AppSettings</Filter>
     </ClCompile>
-    <ClCompile Include="Settings\SettingsServer.cpp">
-      <Filter>源文件\Settings</Filter>
-    </ClCompile>
     <ClCompile Include="Component.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
@@ -170,6 +167,21 @@
     </ClCompile>
     <ClCompile Include="Stb\stb_vorbis.c">
       <Filter>Stb</Filter>
+    </ClCompile>
+    <ClCompile Include="Settings\SettingsServer.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="GuiBase\GuiWorkshop.cpp">
+      <Filter>源文件\GuiBase</Filter>
+    </ClCompile>
+    <ClCompile Include="GuiBase\GuiScroll.cpp">
+      <Filter>源文件\GuiBase</Filter>
+    </ClCompile>
+    <ClCompile Include="GuiBase\GuiElement.cpp">
+      <Filter>源文件\GuiBase</Filter>
+    </ClCompile>
+    <ClCompile Include="GuiBase\GuiContainer.cpp">
+      <Filter>源文件\GuiBase</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -260,6 +272,12 @@
     <ClInclude Include="Components\PerformanceMonitor.h">
       <Filter>头文件\Components</Filter>
     </ClInclude>
+    <ClInclude Include="Components\WeatherDisplay.h">
+      <Filter>头文件\Components</Filter>
+    </ClInclude>
+    <ClInclude Include="Components\TimeDisplay.h">
+      <Filter>头文件\Components</Filter>
+    </ClInclude>
     <ClInclude Include="Components\ProcessManager.h">
       <Filter>头文件\Components</Filter>
     </ClInclude>
@@ -268,9 +286,6 @@
     </ClInclude>
     <ClInclude Include="AppSettings\AppSettings.h">
       <Filter>头文件\AppSettings</Filter>
-    </ClInclude>
-    <ClInclude Include="Settings\SettingsServer.h">
-      <Filter>头文件\Settings</Filter>
     </ClInclude>
     <ClInclude Include="Component.h">
       <Filter>头文件</Filter>
@@ -349,6 +364,12 @@
     </ClInclude>
     <ClInclude Include="PicoJson\picojson.h">
       <Filter>PicoJson</Filter>
+    </ClInclude>
+    <ClInclude Include="Settings\SettingsServer.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="Components\GuiGallery.h">
+      <Filter>头文件\Components</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

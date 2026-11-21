@@ -10,6 +10,8 @@ namespace Components
 #include "Components/ProcessManager.h"
 #include "Components/DebugDemo.h"
 #include "Components/MusicDisplay.h"
+#include "Components/WeatherDisplay.h"
+#include "Components/TimeDisplay.h"
 #include "Components/GuiGallery.h"
 }
 
