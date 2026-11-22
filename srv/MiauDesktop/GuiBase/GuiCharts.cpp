@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <vector>
 
 namespace GuiBase
@@ -233,6 +234,197 @@ namespace GuiBase
         for (int i = 0; i < count; i++)
         {
             drawList->AddCircleFilled(points[static_cast<size_t>(i)], 6.5f, lineColor, 24);
+        }
+    }
+
+    // 绘制实时折线图：像素桶降采样（首/谷/峰/尾）+ 分段批量折线
+    void DrawGuiLineChartLive(ImDrawList* drawList, ImVec2 pos, ImVec2 size,
+                              const float* values, int count,
+                              const char* title, const GuiChartStyle& style,
+                              const GuiLineChartLiveOptions& options)
+    {
+        if (drawList == nullptr || values == nullptr || count <= 0)
+        {
+            return;
+        }
+
+        // 背景
+        DrawGuiCardBackground(drawList, pos, size, ChartStyleToCardStyle(style));
+
+        // 标题
+        if (title != nullptr)
+        {
+            drawList->AddText(ImGui::GetFont(), style.titleFontSize,
+                              pos + ImVec2(20, 18), style.textColor.ToImU32(), title);
+        }
+
+        // 布局常量（与 DrawGuiLineChart 保持一致）
+        const float plotX = 32.0f;
+        const float plotY = 70.0f;
+        const float plotWidth = std::max(1.0f, size.x - 64.0f);
+        const float plotHeight = std::max(1.0f, size.y - 112.0f);
+
+        // 网格线
+        for (int i = 0; i <= 4; ++i)
+        {
+            const float y = pos.y + plotY + plotHeight * static_cast<float>(i) / 4.0f;
+            drawList->AddLine(ImVec2(pos.x + plotX, y),
+                              ImVec2(pos.x + plotX + plotWidth, y),
+                              style.gridColor.ToImU32(), 1.0f);
+        }
+
+        const std::size_t sampleCount = static_cast<std::size_t>(count);
+        const std::size_t first = std::min(options.first, sampleCount);
+        const std::size_t last = std::min(options.last, sampleCount);
+        if (last <= first)
+        {
+            return;
+        }
+        const std::size_t visible = last - first;
+
+        float minimum = options.minimum;
+        float maximum = options.maximum;
+        if (options.autoRange)
+        {
+            bool found = false;
+            for (std::size_t index = first; index < last; ++index)
+            {
+                const float value = values[index];
+                if (!std::isfinite(value))
+                {
+                    continue;
+                }
+                if (!found)
+                {
+                    minimum = maximum = value;
+                    found = true;
+                }
+                else
+                {
+                    minimum = std::min(minimum, value);
+                    maximum = std::max(maximum, value);
+                }
+            }
+            if (!found)
+            {
+                minimum = 0.0f;
+                maximum = 1.0f;
+            }
+        }
+        if (!std::isfinite(minimum) || !std::isfinite(maximum) || maximum <= minimum)
+        {
+            minimum = 0.0f;
+            maximum = 1.0f;
+        }
+        const float valueRange = maximum - minimum;
+
+        // 每个水平像素最多一个桶；桶内保留首、谷、峰、尾四个点
+        const std::size_t bucketCount = std::min<std::size_t>(
+            visible, static_cast<std::size_t>(std::max(1.0f, std::ceil(plotWidth))));
+
+        auto toPoint = [&](std::size_t index, float value) -> ImVec2
+        {
+            const float x = (visible > 1)
+                                ? plotWidth * static_cast<float>(index - first) / static_cast<float>(visible - 1)
+                                : plotWidth * 0.5f;
+            const float normalized = std::clamp((value - minimum) / valueRange, 0.0f, 1.0f);
+            return ImVec2(pos.x + plotX + x, pos.y + plotY + plotHeight * (1.0f - normalized));
+        };
+
+        std::vector<ImVec2> points;
+        points.reserve(bucketCount * 4 + 4);
+        for (std::size_t bucket = 0; bucket < bucketCount; ++bucket)
+        {
+            const std::size_t begin = first + visible * bucket / bucketCount;
+            const std::size_t end = first + visible * (bucket + 1) / bucketCount;
+            if (end <= begin)
+            {
+                continue;
+            }
+
+            std::size_t low = begin;
+            std::size_t high = begin;
+            bool found = false;
+            bool gap = false;
+            for (std::size_t index = begin; index < end; ++index)
+            {
+                const float value = values[index];
+                if (!std::isfinite(value))
+                {
+                    gap = true;
+                    continue;
+                }
+                if (!found)
+                {
+                    low = high = index;
+                    found = true;
+                }
+                else
+                {
+                    if (value < values[low])
+                    {
+                        low = index;
+                    }
+                    if (value > values[high])
+                    {
+                        high = index;
+                    }
+                }
+            }
+
+            if (!found || gap)
+            {
+                // 缺失值桶：插入 NaN 断点，折线在此处分段
+                points.push_back(ImVec2(std::numeric_limits<float>::quiet_NaN(), 0.0f));
+                continue;
+            }
+
+            std::size_t indices[4] = { begin, low, high, end - 1 };
+            std::sort(indices, indices + 4);
+            std::size_t previous = end; // 哨兵：第一个点一定输出
+            for (std::size_t index : indices)
+            {
+                if (index == previous)
+                {
+                    continue;
+                }
+                previous = index;
+                points.push_back(toPoint(index, values[index]));
+            }
+        }
+
+        const ImU32 lineColor = style.palette[0].ToImU32();
+        const float thickness = std::max(0.5f, options.lineThickness);
+
+        // 分段批量绘制：NaN 作为断点，避免 ImDrawList 收到无效顶点
+        std::vector<ImVec2> segment;
+        segment.reserve(points.size());
+        int validCount = 0;
+        auto flush = [&]()
+        {
+            if (segment.size() >= 2)
+            {
+                drawList->AddPolyline(segment.data(), static_cast<int>(segment.size()),
+                                      lineColor, false, thickness);
+            }
+            segment.clear();
+        };
+        for (const ImVec2& point : points)
+        {
+            if (!std::isfinite(point.x))
+            {
+                flush();
+                continue;
+            }
+            segment.push_back(point);
+            ++validCount;
+        }
+        flush();
+
+        // 可见区间只有一个采样时画一个小圆点
+        if (points.size() == 1 && validCount == 1)
+        {
+            drawList->AddCircleFilled(points.front(), std::max(2.0f, thickness * 1.5f), lineColor, 16);
         }
     }
 

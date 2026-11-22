@@ -641,6 +641,24 @@ namespace GuiBase
                           const char* title,
                           const GuiChartStyle& style, GuiLineStyle lineStyle);
 
+    // 实时折线图参数（对应 EUI-NEO v0.6.3 linechart.h 的实时采样模式）
+    struct GuiLineChartLiveOptions
+    {
+        std::size_t first = 0;                           // 可见区间起点（含）
+        std::size_t last = static_cast<std::size_t>(-1); // 可见区间终点（不含）
+        float minimum = 0.0f;                            // 数值范围下限
+        float maximum = 1.0f;                            // 数值范围上限
+        bool autoRange = false;                          // true 时按可见区间实际值自适应
+        float lineThickness = 2.0f;                      // 线宽（实时模式默认更细）
+    };
+
+    // 实时折线图：每个像素桶保留首/谷/峰/尾的降采样 + 分段批量 polyline
+    // 不绘制逐点数据点与数值标签，适用于高频采样的监控曲线
+    void DrawGuiLineChartLive(ImDrawList* drawList, ImVec2 pos, ImVec2 size,
+                              const float* values, int count,
+                              const char* title, const GuiChartStyle& style,
+                              const GuiLineChartLiveOptions& options = GuiLineChartLiveOptions());
+
     // 绘制饼图：背景 + 扇形 + 外侧标签
     void DrawGuiPieChart(ImDrawList* drawList, ImVec2 pos, ImVec2 size,
                          const float* values, int count,
@@ -743,10 +761,40 @@ namespace GuiBase
     bool GuiCarousel(const char* label, const char* const* items, int itemCount,
                      int* selectedIndex, float width, float height);
 
-    // 数据表格（EUI datatable 风格：表头 + 行 + 交替行背景）
+    // 数据表格参数（对应 EUI-NEO v0.6.3 datatable.h 的虚拟化 / 排序 / 筛选 / 列宽）
+    struct GuiDatatableOptions
+    {
+        float rowHeight = 36.0f;             // 固定行高（虚拟化的行距）
+        std::string filter;                  // 全列关键词筛选（空串表示不过滤）
+        int sortColumn = -1;                 // 受控排序列；< 0 时使用控件内部排序状态
+        bool sortDescending = false;         // sortColumn >= 0 时的排序方向
+        bool numericSort = false;            // 数值排序（整格可解析为数字时按大小比较）
+        bool sortable = true;                // 点击表头切换排序
+        bool resizable = true;               // 拖动列边界调整相邻两列宽度
+        std::vector<float> columnWidths;     // 初始列宽（空 = 均分；拖动后保留内部状态）
+        float minColumnWidth = 60.0f;        // 拖动时的最小列宽
+        std::uint64_t revision = 0;          // rows 原地修改后递增，触发筛选/排序索引重建
+
+        // 点击表头时回调 (column, descending)，由外部决定是否受控
+        std::function<void(int, bool)> onSort;
+        // 列宽变化时回调（拖动期间每次变化都会触发）
+        std::function<void(const std::vector<float>&)> onColumnWidthsChange;
+        // 行点击回调，参数为原始数据行号（排序 / 筛选不会改变其含义）
+        std::function<void(std::size_t)> onRowClick;
+    };
+
+    // 数据表格（EUI datatable 风格：表头 + 行 + 交替行背景，无交互的兼容入口）
     void GuiDatatable(const char* label,
                       const char* const* headers, int headerCount,
                       const std::vector<std::vector<std::string>>& rows);
+
+    // 增强版数据表格：固定行高虚拟化 + 稳定排序 + 全列筛选 + 列宽拖拽
+    // size.x <= 0 时取可用宽度；size.y <= 0 时自适应全部行（不虚拟化）
+    void GuiDatatableEx(const char* label,
+                        const char* const* headers, int headerCount,
+                        const std::vector<std::vector<std::string>>& rows,
+                        const ImVec2& size = ImVec2(0.0f, 0.0f),
+                        const GuiDatatableOptions& options = GuiDatatableOptions());
 
     // =========================================================================
     // 输入与选择（GuiInput.cpp）
@@ -788,6 +836,49 @@ namespace GuiBase
 
     // 轻提示（短暂显示后自动消失）
     void GuiToast(const char* text, float duration = 2.0f);
+
+    // =========================================================================
+    // 原生系统对话框（GUIBase.cpp，Windows IFileDialog）
+    // 移植自 EUI-NEO v0.6.3 core/platform 的 saveFileDialog / selectDirectoryDialog。
+    // 只负责选择路径，实际文件读写由调用方完成；字符串入参统一为 UTF-8。
+    // =========================================================================
+
+    enum class GuiFileDialogStatus
+    {
+        Selected,   // 用户确认
+        Cancelled,  // 用户取消
+        Failed      // COM / 系统调用失败（error 字段给出原因）
+    };
+
+    struct GuiFileDialogFilter
+    {
+        const char* name = nullptr;     // 显示名（UTF-8），如 "图片"
+        const char* patterns = nullptr; // 分号分隔的通配符（UTF-8），如 "*.png;*.jpg"
+    };
+
+    struct GuiFileDialogOptions
+    {
+        const char* title = nullptr;            // 对话框标题（UTF-8）
+        const char* suggestedName = nullptr;    // 建议文件名（保存对话框，UTF-8）
+        const char* defaultExtension = nullptr; // 默认扩展名（不含点，UTF-8）
+        const GuiFileDialogFilter* filters = nullptr;
+        int filterCount = 0;
+        HWND owner = nullptr;                   // 父窗口；nullptr 时使用 ImGui 主视口窗口
+    };
+
+    struct GuiFileDialogResult
+    {
+        GuiFileDialogStatus status = GuiFileDialogStatus::Cancelled;
+        std::string path;       // 选中路径（UTF-8，Selected 时有效）
+        std::wstring widePath;  // 选中路径（UTF-16，可直接传给 Win32）
+        std::string error;      // 失败原因（UTF-8，Failed 时有效）
+    };
+
+    // 系统保存文件对话框（支持建议文件名 / 默认扩展名 / 过滤器）
+    GuiFileDialogResult GuiSaveFileDialog(const GuiFileDialogOptions& options = GuiFileDialogOptions());
+
+    // 系统目录选择对话框（仅返回已存在的目录）
+    GuiFileDialogResult GuiSelectDirectoryDialog(const GuiFileDialogOptions& options = GuiFileDialogOptions());
 
     // =========================================================================
     // 滚动与虚拟化（GuiScroll.cpp）

@@ -16,7 +16,7 @@ public:
         int visibleCount = (int)m_showCpu + (int)m_showMemory + (int)m_showGpu;
         if (visibleCount == 0)
             visibleCount = 1;
-        SetWindowSize(ImVec2((150.0f + style.ItemSpacing.x) * visibleCount + 8.0f, 175.0f));
+        SetWindowSize(ImVec2((150.0f + style.ItemSpacing.x) * visibleCount + 8.0f, 155.0f));
     }
 
     PerformanceMonitor() : Component("性能监控", 0, true)
@@ -55,9 +55,9 @@ public:
 protected:
     void CollectSettings(std::vector<Miau::Settings::SettingItem>& items) override
     {
-        items.push_back(MakeToggle("ShowCpu", "CPU 仪表盘", "显示面板", m_showCpu, "显示 CPU 使用率环形仪表"));
-        items.push_back(MakeToggle("ShowMemory", "内存仪表盘", "显示面板", m_showMemory, "显示物理内存使用率环形仪表"));
-        items.push_back(MakeToggle("ShowGpu", "GPU 仪表盘", "显示面板", m_showGpu, "显示 GPU 3D 引擎使用率环形仪表"));
+        items.push_back(MakeToggle("ShowCpu", "CPU 仪表盘", "显示面板", m_showCpu, "显示 CPU 使用率"));
+        items.push_back(MakeToggle("ShowMemory", "内存仪表盘", "显示面板", m_showMemory, "显示物理内存使用率"));
+        items.push_back(MakeToggle("ShowGpu", "GPU 仪表盘", "显示面板", m_showGpu, "显示 GPU 3D 引擎使用率"));
     }
 
     void OnSettingsApplied() override
@@ -157,6 +157,7 @@ private:
                     ImVec2(centerX - labelSize.x * 0.5f, centerY + outerRadius + 12.0f),
                     subColor.ToImU32(), label);
 
+        /*
         // 底部 EUI 胶囊进度条
         float barY = cursor.y + size.y - 16.0f;
         float barH = 6.0f;
@@ -164,7 +165,7 @@ private:
         ImVec2 barPos(cursor.x + barMargin, barY);
         ImVec2 barSize(size.x - barMargin * 2.0f, barH);
         GuiBase::DrawGuiProgress(dl, barPos, barSize, value, fillColor, trackColor);
-
+        */
         ImGui::Dummy(size);
     }
 

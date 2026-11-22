@@ -5,6 +5,9 @@
 
 #include "GUIBase.h"
 
+#include <cstdlib>
+#include <unordered_map>
+
 namespace GuiBase
 {
     // =========================================================================
@@ -240,123 +243,503 @@ namespace GuiBase
 
     // =========================================================================
     // 数据表格
-    // 表头行（header 背景）+ 数据行（交替行背景），列宽按表头数均分，
-    // 单元格文字垂直居中，表头文字用 primary 色，数据文字用 text 色。
-    // 纯绘制函数，底部以 Dummy 占位推进布局
+    // 移植自 EUI-NEO v0.6.3 components/datatable.h：
+    //   - 固定行高虚拟化：只绘制可见行，滚动偏移走 GuiVirtualList
+    //   - 共享数据源 + revision：筛选 / 排序索引只在源、条件或 revision 变化时重建
+    //   - 稳定排序（可切换数值比较）与全列关键词筛选
+    //   - 鼠标拖动列边界调整相邻两列宽度
+    // 旧 GuiDatatable 入口保留为非交互兼容模式。
     // =========================================================================
+    namespace
+    {
+        // 表格跨帧状态：索引 / 列宽 / 滚动偏移 / 上一次筛选排序条件
+        struct GuiTableRuntime
+        {
+            const void* source = nullptr;
+            std::size_t rowCount = 0;
+            std::uint64_t revision = 0;
+            std::string filter;
+            int sortColumn = -1;
+            bool descending = false;
+            bool numeric = false;
+            std::vector<int> order;
+            std::vector<float> widths;
+            std::vector<float> suppliedWidths;
+            float available = -1.0f;
+            float offset = 0.0f;
+            int lastFrame = 0;
+        };
+
+        GuiTableRuntime& GetGuiTableRuntime(ImGuiID id)
+        {
+            static std::unordered_map<ImGuiID, GuiTableRuntime> runtimes;
+            const int frame = ImGui::GetFrameCount();
+            // 窗口关闭后释放对应的表格状态（按帧惰性清理，不在绘制路径做全量扫描）
+            static int lastCleanupFrame = 0;
+            if (frame - lastCleanupFrame > 600)
+            {
+                for (auto it = runtimes.begin(); it != runtimes.end();)
+                {
+                    if (frame - it->second.lastFrame > 600)
+                    {
+                        it = runtimes.erase(it);
+                    }
+                    else
+                    {
+                        ++it;
+                    }
+                }
+                lastCleanupFrame = frame;
+            }
+            GuiTableRuntime& runtime = runtimes[id];
+            runtime.lastFrame = frame;
+            return runtime;
+        }
+
+        const std::string& TableCellAt(const std::vector<std::string>& row, int column)
+        {
+            static const std::string empty;
+            return (column >= 0 && static_cast<std::size_t>(column) < row.size())
+                       ? row[static_cast<std::size_t>(column)]
+                       : empty;
+        }
+
+        // 筛选 + 排序索引重建（条件未变化时直接复用）
+        void RefreshGuiTableOrder(GuiTableRuntime& runtime,
+                                  const std::vector<std::vector<std::string>>& rows,
+                                  const std::string& filter, int sortColumn, bool descending,
+                                  bool numeric, std::uint64_t revision, int columnCount)
+        {
+            if (sortColumn < 0 || sortColumn >= columnCount)
+            {
+                sortColumn = -1;
+            }
+
+            if (runtime.source == &rows && runtime.rowCount == rows.size() &&
+                runtime.revision == revision && runtime.filter == filter &&
+                runtime.sortColumn == sortColumn && runtime.descending == descending &&
+                runtime.numeric == numeric)
+            {
+                return;
+            }
+
+            runtime.source = &rows;
+            runtime.rowCount = rows.size();
+            runtime.revision = revision;
+            runtime.filter = filter;
+            runtime.sortColumn = sortColumn;
+            runtime.descending = descending;
+            runtime.numeric = numeric;
+            runtime.order.clear();
+            runtime.order.reserve(rows.size());
+
+            for (std::size_t index = 0; index < rows.size(); ++index)
+            {
+                if (filter.empty())
+                {
+                    runtime.order.push_back(static_cast<int>(index));
+                    continue;
+                }
+                for (const std::string& cell : rows[index])
+                {
+                    if (cell.find(filter) != std::string::npos)
+                    {
+                        runtime.order.push_back(static_cast<int>(index));
+                        break;
+                    }
+                }
+            }
+
+            if (sortColumn >= 0)
+            {
+                // 数值排序：整格可解析为有限数时按大小比较，数值行排在文本行之前
+                std::stable_sort(runtime.order.begin(), runtime.order.end(),
+                                 [&rows, sortColumn, descending, numeric](int left, int right)
+                                 {
+                                     const std::string& a = TableCellAt(rows[static_cast<std::size_t>(left)], sortColumn);
+                                     const std::string& b = TableCellAt(rows[static_cast<std::size_t>(right)], sortColumn);
+                                     int comparison = a.compare(b);
+                                     if (numeric)
+                                     {
+                                         char* aEnd = nullptr;
+                                         char* bEnd = nullptr;
+                                         const double aValue = std::strtod(a.c_str(), &aEnd);
+                                         const double bValue = std::strtod(b.c_str(), &bEnd);
+                                         const bool aNumber = aEnd != a.c_str() && *aEnd == '\0' && std::isfinite(aValue);
+                                         const bool bNumber = bEnd != b.c_str() && *bEnd == '\0' && std::isfinite(bValue);
+                                         if (aNumber && bNumber)
+                                         {
+                                             comparison = (aValue < bValue) ? -1 : ((aValue > bValue) ? 1 : 0);
+                                         }
+                                         else if (aNumber != bNumber)
+                                         {
+                                             comparison = aNumber ? -1 : 1;
+                                         }
+                                     }
+                                     return descending ? comparison > 0 : comparison < 0;
+                                 });
+            }
+
+            runtime.offset = 0.0f;
+        }
+
+        // 列宽：初始值按供给宽度 / 均分，可用宽度变化时等比缩放，最后夹到最小宽度
+        void EnsureGuiTableWidths(GuiTableRuntime& runtime, int columnCount,
+                                  const std::vector<float>& supplied, float available, float minimum)
+        {
+            if (columnCount <= 0)
+            {
+                runtime.widths.clear();
+                return;
+            }
+
+            const bool columnsChanged = runtime.widths.size() != static_cast<std::size_t>(columnCount);
+            const bool suppliedChanged = runtime.suppliedWidths != supplied;
+            if (columnsChanged || suppliedChanged)
+            {
+                runtime.widths.assign(static_cast<std::size_t>(columnCount),
+                                      available / static_cast<float>(columnCount));
+                for (int column = 0; column < columnCount; ++column)
+                {
+                    if (column < static_cast<int>(supplied.size()) &&
+                        std::isfinite(supplied[static_cast<std::size_t>(column)]) &&
+                        supplied[static_cast<std::size_t>(column)] > 0.0f)
+                    {
+                        runtime.widths[static_cast<std::size_t>(column)] =
+                            supplied[static_cast<std::size_t>(column)];
+                    }
+                }
+                runtime.suppliedWidths = supplied;
+                runtime.available = available;
+            }
+            else if (runtime.available > 0.0f && std::fabs(runtime.available - available) > 0.5f)
+            {
+                const float scale = available / runtime.available;
+                for (float& width : runtime.widths)
+                {
+                    width = std::max(1.0f, width * scale);
+                }
+                runtime.available = available;
+            }
+
+            // 归一化到可用宽度
+            float total = 0.0f;
+            for (float width : runtime.widths)
+            {
+                total += std::max(1.0f, width);
+            }
+            if (total > 0.0f)
+            {
+                for (float& width : runtime.widths)
+                {
+                    width = std::max(1.0f, width) * available / total;
+                }
+            }
+
+            // 最小宽度夹取：不足部分从超出最小宽度的列按比例回收
+            const float minWidth = std::min(std::max(1.0f, minimum), available / static_cast<float>(columnCount));
+            float excess = 0.0f;
+            for (float& width : runtime.widths)
+            {
+                if (width < minWidth)
+                {
+                    excess += minWidth - width;
+                    width = minWidth;
+                }
+            }
+            if (excess > 0.0f)
+            {
+                float spare = 0.0f;
+                for (float width : runtime.widths)
+                {
+                    spare += width - minWidth;
+                }
+                const float ratio = spare > 0.0f ? std::max(0.0f, (spare - excess) / spare) : 0.0f;
+                for (float& width : runtime.widths)
+                {
+                    width = minWidth + (width - minWidth) * ratio;
+                }
+            }
+
+            runtime.available = available;
+        }
+    }
+
+    // 兼容入口：非交互（不排序 / 不调列宽），高度自适应全部行
     void GuiDatatable(const char* label,
                       const char* const* headers, int headerCount,
                       const std::vector<std::vector<std::string>>& rows)
+    {
+        GuiDatatableOptions options;
+        options.sortable = false;
+        options.resizable = false;
+        GuiDatatableEx(label, headers, headerCount, rows, ImVec2(0.0f, 0.0f), options);
+    }
+
+    void GuiDatatableEx(const char* label,
+                        const char* const* headers, int headerCount,
+                        const std::vector<std::vector<std::string>>& rows,
+                        const ImVec2& size, const GuiDatatableOptions& options)
     {
         if (headers == nullptr || headerCount <= 0)
         {
             return;
         }
 
-        GuiThemeTokens tokens = Theme::Dark();
-        ImGui::PushID(label);
+        const GuiThemeTokens tokens = Theme::Dark(); // 每帧仅取一次令牌
+        const float headerHeight = 40.0f;
+        const float rowHeight = std::max(1.0f, options.rowHeight);
+        const float radius = tokens.radius.card;
+        const float barWidth = 8.0f;
+        const float barGap = 4.0f;
+
+        ImGui::PushID(label != nullptr ? label : "##gui_datatable");
 
         ImDrawList* drawList = ImGui::GetWindowDrawList();
-        const ImVec2 cursor = ImGui::GetCursorScreenPos();
-        const float tableWidth = ImGui::GetContentRegionAvail().x;
-        const float headerHeight = 40.0f;
-        const float rowHeight = 36.0f;
-        const float columnWidth = tableWidth / static_cast<float>(headerCount);
-        const float textInset = 16.0f;
-        const float radius = tokens.radius.card;
+        const ImVec2 pos = ImGui::GetCursorScreenPos();
+        const float availableWidth = ImGui::GetContentRegionAvail().x;
+        const float tableWidth = (size.x > 0.0f) ? size.x : availableWidth;
+        if (tableWidth <= 1.0f)
+        {
+            ImGui::PopID();
+            return;
+        }
 
-        // EUI 暗色表格配色
+        GuiTableRuntime& runtime = GetGuiTableRuntime(ImGui::GetID("##state"));
+
+        // 受控排序优先；否则使用控件内部状态（点击表头更新）
+        int sortColumn = (options.sortColumn >= 0) ? options.sortColumn : runtime.sortColumn;
+        bool descending = (options.sortColumn >= 0) ? options.sortDescending : runtime.descending;
+
+        RefreshGuiTableOrder(runtime, rows, options.filter, sortColumn, descending,
+                             options.numericSort, options.revision, headerCount);
+
+        // 先按行数确定滚动性与内容宽度（与 GuiVirtualList 的扣除规则保持一致）
+        const float totalRowsHeight = static_cast<float>(runtime.order.size()) * rowHeight;
+        const float bodyHeight = (size.y > 0.0f) ? std::max(0.0f, size.y - headerHeight) : totalRowsHeight;
+        const bool scrollable = totalRowsHeight > bodyHeight + 0.5f;
+        const float contentWidth = std::max(1.0f, tableWidth - (scrollable ? barWidth + barGap : 0.0f));
+        const float tableHeight = headerHeight + bodyHeight;
+
+        EnsureGuiTableWidths(runtime, headerCount, options.columnWidths, contentWidth,
+                             options.minColumnWidth);
+
+        // === 表头交互：点击排序 / 拖动列边界 ===
+        {
+            const ImVec2 savedCursor = ImGui::GetCursorScreenPos();
+
+            if (options.sortable)
+            {
+                float x = pos.x;
+                for (int column = 0; column < headerCount; ++column)
+                {
+                    ImGui::PushID(column);
+                    ImGui::SetCursorScreenPos(ImVec2(x, pos.y));
+                    ImGui::InvisibleButton("##header",
+                                           ImVec2(runtime.widths[static_cast<std::size_t>(column)],
+                                                  headerHeight));
+                    const bool hovered = ImGui::IsItemHovered();
+                    if (hovered)
+                    {
+                        ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+                    }
+                    if (ImGui::IsItemClicked())
+                    {
+                        const bool nextDescending = (sortColumn == column) ? !descending : false;
+                        if (options.onSort)
+                        {
+                            options.onSort(column, nextDescending);
+                        }
+                        if (options.sortColumn < 0)
+                        {
+                            // 非受控：本帧立即生效
+                            runtime.sortColumn = column;
+                            runtime.descending = nextDescending;
+                            sortColumn = column;
+                            descending = nextDescending;
+                        }
+                    }
+                    ImGui::PopID();
+                    x += runtime.widths[static_cast<std::size_t>(column)];
+                }
+            }
+
+            if (options.resizable)
+            {
+                float x = pos.x;
+                for (int column = 0; column + 1 < headerCount; ++column)
+                {
+                    x += runtime.widths[static_cast<std::size_t>(column)];
+                    ImGui::PushID(1000 + column);
+                    ImGui::SetCursorScreenPos(ImVec2(x - 4.0f, pos.y));
+                    ImGui::InvisibleButton("##colresize", ImVec2(8.0f, headerHeight));
+                    const bool hovered = ImGui::IsItemHovered();
+                    const bool active = ImGui::IsItemActive();
+                    if (hovered || active)
+                    {
+                        ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+                    }
+                    if (active)
+                    {
+                        const float delta = ImGui::GetIO().MouseDelta.x;
+                        if (delta != 0.0f)
+                        {
+                            float& leftWidth = runtime.widths[static_cast<std::size_t>(column)];
+                            float& rightWidth = runtime.widths[static_cast<std::size_t>(column + 1)];
+                            const float sum = leftWidth + rightWidth;
+                            const float minimum = std::min(options.minColumnWidth, sum * 0.5f);
+                            const float nextLeft = std::clamp(leftWidth + delta, minimum, sum - minimum);
+                            leftWidth = nextLeft;
+                            rightWidth = sum - nextLeft;
+                            if (options.onColumnWidthsChange)
+                            {
+                                options.onColumnWidthsChange(runtime.widths);
+                            }
+                        }
+                    }
+                    ImGui::PopID();
+                }
+            }
+
+            ImGui::SetCursorScreenPos(savedCursor);
+        }
+
+        // 表头点击可能刚改变排序：再刷一次索引（行数不变，滚动性不变）
+        RefreshGuiTableOrder(runtime, rows, options.filter, sortColumn, descending,
+                             options.numericSort, options.revision, headerCount);
+
+        // === 数据体：虚拟化滚动 + 可见行 ===
+        ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + headerHeight));
+        GuiVirtualScrollOptions scrollOptions;
+        scrollOptions.scrollbarWidth = barWidth;
+        scrollOptions.scrollbarGap = barGap;
+        scrollOptions.wheelStep = rowHeight * 2.0f;
+        const GuiVirtualRange range = GuiVirtualList("##body", ImVec2(tableWidth, bodyHeight),
+                                                     static_cast<int>(runtime.order.size()), rowHeight,
+                                                     &runtime.offset, 1.0f, GuiScrollStyle(), scrollOptions);
+
+        const float bodyTop = pos.y + headerHeight;
+        const float bodyBottom = bodyTop + bodyHeight;
+
+        if (!runtime.order.empty())
+        {
+            // 行内容裁剪到数据体，避免滚动时压到表头 / 表格外
+            drawList->PushClipRect(ImVec2(pos.x, bodyTop), ImVec2(pos.x + tableWidth, bodyBottom), true);
+            for (int view = range.first; view <= range.last; ++view)
+            {
+                if (view < 0 || view >= static_cast<int>(runtime.order.size()))
+                {
+                    continue;
+                }
+                const int sourceRow = runtime.order[static_cast<std::size_t>(view)];
+                if (sourceRow < 0 || sourceRow >= static_cast<int>(rows.size()))
+                {
+                    continue;
+                }
+
+                const float rowY = bodyTop + static_cast<float>(view) * rowHeight - runtime.offset;
+                const ImVec2 rowMin(pos.x, rowY);
+                const ImVec2 rowMax(pos.x + contentWidth, rowY + rowHeight);
+                if (rowMax.y <= bodyTop || rowMin.y >= bodyBottom)
+                {
+                    continue;
+                }
+
+                const bool lastView = (view == static_cast<int>(runtime.order.size()) - 1);
+                const GuiColor rowColor = (view % 2 != 0)
+                                              ? MixColor(tokens.surface, tokens.surfaceHover, 0.30f)
+                                              : tokens.surface;
+                const ImDrawFlags rowFlags = lastView
+                                                 ? (ImDrawFlags_RoundCornersBottomLeft | ImDrawFlags_RoundCornersBottomRight)
+                                                 : ImDrawFlags_None;
+                drawList->AddRectFilled(rowMin, rowMax, rowColor.ToImU32(), radius, rowFlags);
+
+                // 行命中：用原始行号作为 ID，排序后仍稳定；点击回传原始行号
+                ImGui::PushID(sourceRow);
+                ImGui::SetCursorScreenPos(rowMin);
+                const bool clicked = ImGui::InvisibleButton("##row", ImVec2(contentWidth, rowHeight));
+                const bool hovered = ImGui::IsItemHovered();
+                ImGui::PopID();
+
+                if (hovered)
+                {
+                    drawList->AddRectFilled(rowMin, rowMax,
+                                            WithAlpha(tokens.surfaceHover, 0.55f).ToImU32(), radius, rowFlags);
+                }
+                if (clicked && options.onRowClick)
+                {
+                    options.onRowClick(static_cast<std::size_t>(sourceRow));
+                }
+
+                const std::vector<std::string>& row = rows[static_cast<std::size_t>(sourceRow)];
+                float cellX = pos.x;
+                for (int column = 0; column < headerCount; ++column)
+                {
+                    const std::string& text = TableCellAt(row, column);
+                    if (!text.empty())
+                    {
+                        const ImVec2 textSize = ImGui::CalcTextSize(text.c_str());
+                        drawList->AddText(ImVec2(cellX + 16.0f, rowY + (rowHeight - textSize.y) * 0.5f),
+                                          tokens.text.ToImU32(), text.c_str());
+                    }
+                    cellX += runtime.widths[static_cast<std::size_t>(column)];
+                }
+
+                if (!lastView)
+                {
+                    drawList->AddLine(ImVec2(pos.x, rowMax.y - 1.0f),
+                                      ImVec2(pos.x + contentWidth, rowMax.y - 1.0f),
+                                      WithAlpha(tokens.border, 0.22f).ToImU32());
+                }
+            }
+            drawList->PopClipRect();
+        }
+        else
+        {
+            const char* message = options.filter.empty() ? "暂无数据" : "无匹配数据";
+            const ImVec2 extent = ImGui::CalcTextSize(message);
+            drawList->AddText(ImVec2(pos.x + (contentWidth - extent.x) * 0.5f,
+                                     bodyTop + std::max(0.0f, (bodyHeight - extent.y) * 0.5f)),
+                              WithAlpha(tokens.text, 0.45f).ToImU32(), message);
+        }
+
+        // === 表头绘制（最后绘制，保证覆盖行内容） ===
         const GuiColor headerColor = MixColor(tokens.surfaceHover, tokens.surface, 0.32f);
-        const GuiColor rowColor = tokens.surface;
-        const GuiColor rowAltColor = MixColor(tokens.surface, tokens.surfaceHover, 0.30f);
         const GuiColor dividerColor = WithAlpha(tokens.border, 0.42f);
         const GuiColor borderColor = WithAlpha(tokens.border, 0.72f);
 
-        const int rowCount = static_cast<int>(rows.size());
-        float y = cursor.y;
+        drawList->AddRectFilled(pos, ImVec2(pos.x + tableWidth, pos.y + headerHeight),
+                                headerColor.ToImU32(), radius,
+                                ImDrawFlags_RoundCornersTopLeft | ImDrawFlags_RoundCornersTopRight);
+        drawList->AddLine(ImVec2(pos.x, pos.y + headerHeight - 1.0f),
+                          ImVec2(pos.x + tableWidth, pos.y + headerHeight - 1.0f),
+                          dividerColor.ToImU32());
 
-        // 表头行
-        const ImDrawFlags headerFlags = (rowCount > 0)
-            ? (ImDrawFlags_RoundCornersTopLeft | ImDrawFlags_RoundCornersTopRight)
-            : ImDrawFlags_RoundCornersAll;
-        drawList->AddRectFilled(
-            ImVec2(cursor.x, y),
-            ImVec2(cursor.x + tableWidth, y + headerHeight),
-            headerColor.ToImU32(),
-            radius,
-            headerFlags);
+        float headerX = pos.x;
         for (int column = 0; column < headerCount; ++column)
         {
             const char* text = headers[column] != nullptr ? headers[column] : "";
             const ImVec2 textSize = ImGui::CalcTextSize(text);
-            const ImVec2 textPos(
-                cursor.x + static_cast<float>(column) * columnWidth + textInset,
-                y + (headerHeight - textSize.y) * 0.5f);
-            drawList->AddText(textPos, tokens.primary.ToImU32(), text);
-        }
-        y += headerHeight;
+            drawList->AddText(ImVec2(headerX + 16.0f, pos.y + (headerHeight - textSize.y) * 0.5f),
+                              tokens.primary.ToImU32(), text);
 
-        // 表头分隔线
-        drawList->AddLine(
-            ImVec2(cursor.x, y - 1.0f),
-            ImVec2(cursor.x + tableWidth, y - 1.0f),
-            dividerColor.ToImU32());
-
-        // 数据行
-        for (int row = 0; row < rowCount; ++row)
-        {
-            const bool lastRow = (row == rowCount - 1);
-            const bool alternate = (row % 2 != 0);
-            const GuiColor cellBg = alternate ? rowAltColor : rowColor;
-            const ImDrawFlags rowFlags = lastRow
-                ? (ImDrawFlags_RoundCornersBottomLeft | ImDrawFlags_RoundCornersBottomRight)
-                : ImDrawFlags_None;
-
-            drawList->AddRectFilled(
-                ImVec2(cursor.x, y),
-                ImVec2(cursor.x + tableWidth, y + rowHeight),
-                cellBg.ToImU32(),
-                radius,
-                rowFlags);
-
-            for (int column = 0; column < headerCount; ++column)
+            if (sortColumn == column)
             {
-                std::string cellText;
-                if (static_cast<std::size_t>(column) < rows[row].size())
-                {
-                    cellText = rows[row][column];
-                }
-                const ImVec2 textSize = ImGui::CalcTextSize(cellText.c_str());
-                const ImVec2 textPos(
-                    cursor.x + static_cast<float>(column) * columnWidth + textInset,
-                    y + (rowHeight - textSize.y) * 0.5f);
-                drawList->AddText(textPos, tokens.text.ToImU32(), cellText.c_str());
+                const char* icon = descending ? ICON_FA_ARROW_DOWN : ICON_FA_ARROW_UP;
+                const ImVec2 iconSize = ImGui::CalcTextSize(icon);
+                const float iconX = headerX + runtime.widths[static_cast<std::size_t>(column)] - iconSize.x - 12.0f;
+                drawList->AddText(ImVec2(iconX, pos.y + (headerHeight - iconSize.y) * 0.5f),
+                                  WithAlpha(tokens.primary, 0.86f).ToImU32(), icon);
             }
-
-            // 行间分隔线
-            if (!lastRow)
-            {
-                drawList->AddLine(
-                    ImVec2(cursor.x, y + rowHeight - 1.0f),
-                    ImVec2(cursor.x + tableWidth, y + rowHeight - 1.0f),
-                    dividerColor.ToImU32());
-            }
-            y += rowHeight;
+            headerX += runtime.widths[static_cast<std::size_t>(column)];
         }
 
-        // 外框描边
-        drawList->AddRect(
-            cursor,
-            ImVec2(cursor.x + tableWidth, y),
-            borderColor.ToImU32(),
-            radius,
-            0,
-            1.0f);
+        // 外框
+        drawList->AddRect(pos, ImVec2(pos.x + tableWidth, pos.y + tableHeight),
+                          borderColor.ToImU32(), radius, 0, 1.0f);
 
-        // 占位推进布局，避免后续控件与表格重叠
-        const float totalHeight = headerHeight + static_cast<float>(rowCount) * rowHeight;
-        ImGui::Dummy(ImVec2(tableWidth, totalHeight));
-
+        // 推进布局光标到表格底部（GuiVirtualList 的 Dummy 只到数据体底部）
+        ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + tableHeight));
         ImGui::PopID();
     }
 

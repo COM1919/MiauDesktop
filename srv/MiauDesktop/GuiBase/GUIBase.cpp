@@ -3,6 +3,13 @@
 
 #include "GUIBase.h"
 
+#include <shobjidl.h>
+#include <cstdio>
+
+#pragma comment(lib, "ole32.lib")
+#pragma comment(lib, "uuid.lib")
+#pragma comment(lib, "shell32.lib")
+
 #define STB_IMAGE_IMPLEMENTATION
 #include "../Stb/stb_image.h"
 #include "../Stb/stb_image_write.h"
@@ -538,5 +545,213 @@ void CleanupRenderTarget()
     {
         RenderData::g_mainRenderTargetView->Release();
         RenderData::g_mainRenderTargetView = nullptr;
+    }
+}
+
+// =============================================================================
+// 原生系统对话框（Win32 IFileDialog）
+// 移植自 EUI-NEO v0.6.3 core/platform/platform.cpp 的 saveFileDialog /
+// selectDirectoryDialog。宿主只负责选择路径，文件读写由调用方完成。
+// =============================================================================
+namespace GuiBase
+{
+    namespace
+    {
+        std::wstring Utf8ToWide(const char* text)
+        {
+            if (text == nullptr || text[0] == '\0')
+            {
+                return std::wstring();
+            }
+            const int length = MultiByteToWideChar(CP_UTF8, 0, text, -1, nullptr, 0);
+            if (length <= 0)
+            {
+                return std::wstring();
+            }
+            std::wstring result(static_cast<std::size_t>(length), L'\0');
+            MultiByteToWideChar(CP_UTF8, 0, text, -1, &result[0], length);
+            result.resize(static_cast<std::size_t>(length - 1));
+            return result;
+        }
+
+        std::string WideToUtf8(const wchar_t* text)
+        {
+            if (text == nullptr || text[0] == L'\0')
+            {
+                return std::string();
+            }
+            const int length = WideCharToMultiByte(CP_UTF8, 0, text, -1, nullptr, 0, nullptr, nullptr);
+            if (length <= 0)
+            {
+                return std::string();
+            }
+            std::string result(static_cast<std::size_t>(length), '\0');
+            WideCharToMultiByte(CP_UTF8, 0, text, -1, &result[0], length, nullptr, nullptr);
+            result.resize(static_cast<std::size_t>(length - 1));
+            return result;
+        }
+
+        std::string FormatHResultText(HRESULT value, const char* prefix)
+        {
+            char buffer[64];
+            std::snprintf(buffer, sizeof(buffer), "%s0x%08lX", prefix,
+                          static_cast<unsigned long>(value));
+            return std::string(buffer);
+        }
+
+        // save = true 走保存对话框；false 且 pickFolders = true 走目录选择
+        GuiFileDialogResult ShowShellFileDialog(bool save, const GuiFileDialogOptions& options)
+        {
+            GuiFileDialogResult result;
+
+            const HRESULT comResult = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+            const bool shouldUninitialize = SUCCEEDED(comResult);
+            if (FAILED(comResult) && comResult != RPC_E_CHANGED_MODE)
+            {
+                result.status = GuiFileDialogStatus::Failed;
+                result.error = FormatHResultText(comResult, "COM 初始化失败：");
+                return result;
+            }
+
+            IFileDialog* dialog = nullptr;
+            HRESULT hr = CoCreateInstance(save ? CLSID_FileSaveDialog : CLSID_FileOpenDialog,
+                                          nullptr, CLSCTX_INPROC_SERVER,
+                                          IID_PPV_ARGS(&dialog));
+            if (FAILED(hr) || dialog == nullptr)
+            {
+                result.status = GuiFileDialogStatus::Failed;
+                result.error = FormatHResultText(hr, "创建系统对话框失败：");
+                if (shouldUninitialize)
+                {
+                    CoUninitialize();
+                }
+                return result;
+            }
+
+            FILEOPENDIALOGOPTIONS flags = 0;
+            if (SUCCEEDED(dialog->GetOptions(&flags)))
+            {
+                flags |= FOS_FORCEFILESYSTEM;
+                if (save)
+                {
+                    flags |= FOS_OVERWRITEPROMPT;
+                }
+                else
+                {
+                    flags |= FOS_PICKFOLDERS;
+                }
+                dialog->SetOptions(flags);
+            }
+
+            const std::wstring title = Utf8ToWide(options.title);
+            if (!title.empty())
+            {
+                dialog->SetTitle(title.c_str());
+            }
+
+            const std::wstring suggestedName = Utf8ToWide(options.suggestedName);
+            if (!suggestedName.empty())
+            {
+                dialog->SetFileName(suggestedName.c_str());
+            }
+
+            const std::wstring extension = Utf8ToWide(options.defaultExtension);
+            if (!extension.empty())
+            {
+                dialog->SetDefaultExtension(extension.c_str());
+            }
+
+            if (options.filters != nullptr && options.filterCount > 0)
+            {
+                // COMDLG_FILTERSPEC 只持有指针，宽字符串需要在整个 Show 期间存活；
+                // 先 reserve 再 push，避免 vector 扩容使 c_str() 失效。
+                std::vector<std::wstring> storage;
+                storage.reserve(static_cast<std::size_t>(options.filterCount) * 2);
+                for (int index = 0; index < options.filterCount; ++index)
+                {
+                    storage.push_back(Utf8ToWide(options.filters[index].name));
+                    storage.push_back(Utf8ToWide(options.filters[index].patterns));
+                }
+
+                std::vector<COMDLG_FILTERSPEC> specs(static_cast<std::size_t>(options.filterCount));
+                for (int index = 0; index < options.filterCount; ++index)
+                {
+                    const std::size_t offset = static_cast<std::size_t>(index) * 2;
+                    specs[static_cast<std::size_t>(index)].pszName = storage[offset].c_str();
+                    specs[static_cast<std::size_t>(index)].pszSpec = storage[offset + 1].c_str();
+                }
+                dialog->SetFileTypes(static_cast<UINT>(specs.size()), specs.data());
+                dialog->SetFileTypeIndex(1);
+            }
+
+            HWND owner = options.owner;
+            if (owner == nullptr)
+            {
+                if (ImGuiViewport* viewport = ImGui::GetMainViewport())
+                {
+                    owner = static_cast<HWND>(viewport->PlatformHandle);
+                }
+            }
+
+            hr = dialog->Show(owner);
+            if (hr == HRESULT_FROM_WIN32(ERROR_CANCELLED))
+            {
+                result.status = GuiFileDialogStatus::Cancelled;
+            }
+            else if (SUCCEEDED(hr))
+            {
+                IShellItem* item = nullptr;
+                if (SUCCEEDED(dialog->GetResult(&item)) && item != nullptr)
+                {
+                    PWSTR path = nullptr;
+                    if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path)) && path != nullptr)
+                    {
+                        result.widePath = path;
+                        result.path = WideToUtf8(path);
+                        result.status = GuiFileDialogStatus::Selected;
+                        CoTaskMemFree(path);
+                    }
+                    else
+                    {
+                        result.status = GuiFileDialogStatus::Failed;
+                        result.error = "无法读取所选路径";
+                    }
+                    item->Release();
+                }
+                else
+                {
+                    result.status = GuiFileDialogStatus::Failed;
+                    result.error = "系统对话框没有返回结果";
+                }
+            }
+            else
+            {
+                result.status = GuiFileDialogStatus::Failed;
+                result.error = FormatHResultText(hr, "系统对话框调用失败：");
+            }
+
+            // 原生模态对话框会独占鼠标消息，主窗口收不到按钮抬起事件；
+            // 返回后显式复位，避免 ImGui 认为鼠标仍处于按下状态。
+            ImGuiIO& io = ImGui::GetIO();
+            io.AddMouseButtonEvent(0, false);
+            io.AddMouseButtonEvent(1, false);
+            io.AddMouseButtonEvent(2, false);
+
+            dialog->Release();
+            {
+                CoUninitialize();
+            }
+            return result;
+        }
+    }
+
+    GuiFileDialogResult GuiSaveFileDialog(const GuiFileDialogOptions& options)
+    {
+        return ShowShellFileDialog(true, options);
+    }
+
+    GuiFileDialogResult GuiSelectDirectoryDialog(const GuiFileDialogOptions& options)
+    {
+        return ShowShellFileDialog(false, options);
     }
 }

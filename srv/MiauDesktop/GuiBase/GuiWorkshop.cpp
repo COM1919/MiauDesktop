@@ -580,127 +580,155 @@ namespace GuiBase
             *animSlot += delta * (1.0f - std::exp(-speed * dt));
         }
 
-        // 连续视觉中心：animSlot 可为小数/越界，绘制时按 count 取模映射回真实索引
-        const int visualCenter = static_cast<int>(std::lround(*animSlot));
-        const float fractionalSlot = *animSlot - static_cast<float>(visualCenter);
-
-        // 从最远层向中心绘制，保证中间卡片在最上层；小 count 环绕时用去重表避免重复绘制
-        int drawnIndices[5];
-        int drawnCount = 0;
-        for (int depth = 2; depth >= 0; --depth)
+        // 每张卡片的槽位 = 卡片索引与连续视觉中心的环形最短差。
+        // 注意不能先对 animSlot 取整再按 ±depth 反推索引：那样半个整数处
+        // 整排卡片会被平移两个槽位，动画末尾表现为突然瞬移。
+        struct CardSlot
         {
-            for (int sign = -1; sign <= 1; sign += 2)
+            float slot = 0.0f;
+            int index = 0;
+            float distance = 0.0f;
+        };
+        CardSlot visibleCards[6];
+        int visibleCount = 0;
+        const float cycle = static_cast<float>(count);
+        for (int index = 0; index < count; ++index)
+        {
+            float slot = static_cast<float>(index) - *animSlot;
+            // 归一化到 (-count/2, count/2]，首尾相邻时走最短路径
+            slot = std::fmod(slot, cycle);
+            if (slot > cycle * 0.5f)
             {
-                if (depth == 0 && sign > 0)
+                slot -= cycle;
+            }
+            else if (slot <= -cycle * 0.5f)
+            {
+                slot += cycle;
+            }
+
+            const float distance = std::fabs(slot);
+            if (distance > 2.5f)
+            {
+                continue; // 只绘制视觉中心附近的卡片
+            }
+
+            // 按距离从远到近插入，保证中心卡片最后绘制（位于最上层）
+            constexpr int kMaxVisibleCards = static_cast<int>(sizeof(visibleCards) / sizeof(visibleCards[0]));
+            if (visibleCount >= kMaxVisibleCards)
+            {
+                continue;
+            }
+            int insertAt = visibleCount;
+            while (insertAt > 0 && visibleCards[insertAt - 1].distance < distance)
+            {
+                visibleCards[insertAt] = visibleCards[insertAt - 1];
+                --insertAt;
+            }
+            visibleCards[insertAt] = CardSlot{ slot, index, distance };
+            ++visibleCount;
+        }
+
+        for (int drawn = 0; drawn < visibleCount; ++drawn)
+        {
+            const float slot = visibleCards[drawn].slot;
+            const int index = visibleCards[drawn].index;
+            const float distance = visibleCards[drawn].distance;
+
+            // 环形槽位在半圈边界处会翻到另一侧表示；在边界附近把卡片淡出，
+            // 避免极窄 / 极宽布局下看到最外侧卡片瞬间跳到对面。
+            const float fadeEnd = std::min(2.5f, cycle * 0.5f);
+            const float fadeStart = fadeEnd - 0.4f;
+            const float edgeAlpha = (cycle >= 3.0f && distance > fadeStart)
+                                        ? std::clamp((fadeEnd - distance) / (fadeEnd - fadeStart), 0.0f, 1.0f)
+                                        : 1.0f;
+            if (edgeAlpha <= 0.0f)
+            {
+                continue;
+            }
+
+            // 距离越远越小：中心 1.0，侧面 0.82，按槽位连续插值
+            const float amount = std::min(1.0f, distance);
+            const float cardScale = 1.0f + (0.82f - 1.0f) * amount;
+            const float cardWidth = baseWidth * cardScale;
+            const float cardHeight = baseHeight * cardScale;
+            const float cardCenterX = centerX + slot * slotOffset;
+            // tilt（card_slider.h:66）：侧边卡片轻微上下错开，营造倾斜层次
+            const float tiltOffsetY =
+                options.tilt ? 8.0f * ((slot >= 0.0f) ? 1.0f : -1.0f) * amount : 0.0f;
+            const ImVec2 cardMin(cardCenterX - cardWidth * 0.5f,
+                                 centerY - cardHeight * 0.5f + tiltOffsetY);
+            const ImVec2 cardMax(cardMin.x + cardWidth, cardMin.y + cardHeight);
+            if (cardMax.x < pos.x || cardMin.x > maxPos.x)
+            {
+                continue;
+            }
+
+            // 阴影：只给近处卡片绘制
+            if (distance <= 1.5f)
+            {
+                GuiShadowStyle shadowStyle;
+                shadowStyle.blur = 20.0f;
+                shadowStyle.offsetX = 0.0f;
+                shadowStyle.offsetY = 10.0f;
+                shadowStyle.color = GuiColor(0.0f, 0.0f, 0.0f, 0.30f * edgeAlpha);
+                DrawGuiSoftShadow(drawList, cardMin, ImVec2(cardWidth, cardHeight),
+                                  shadowStyle, tokens.radius.card);
+            }
+
+            // 卡片主体：有纹理则绘制圆角图片，否则用表面色占位
+            const float cardRounding = tokens.radius.card;
+            const Texture2D texture = (textures != nullptr) ? textures[index] : nullptr;
+            if (texture != nullptr)
+            {
+                drawList->AddImageRounded((ImTextureID)texture, cardMin, cardMax,
+                                          ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f),
+                                          IM_COL32(255, 255, 255, (int)(255.0f * edgeAlpha)), cardRounding);
+            }
+            else
+            {
+                drawList->AddRectFilled(cardMin, cardMax,
+                                        WithAlpha(tokens.surfaceHover, edgeAlpha).ToImU32(), cardRounding);
+            }
+
+            // 底部半透明 overlay：保证文字可读
+            const float overlayHeight = cardHeight * 0.42f;
+            const ImVec2 overlayMin(cardMin.x, cardMax.y - overlayHeight);
+            const int overlayAlpha = (int)(190.0f * edgeAlpha);
+            drawList->AddRectFilledMultiColor(overlayMin, cardMax,
+                                              IM_COL32(0, 0, 0, 0), IM_COL32(0, 0, 0, 0),
+                                              IM_COL32(0, 0, 0, overlayAlpha), IM_COL32(0, 0, 0, overlayAlpha));
+
+            drawList->AddRect(cardMin, cardMax, WithAlpha(tokens.border, 0.42f * edgeAlpha).ToImU32(),
+                              cardRounding, ImDrawFlags_RoundCornersAll, 1.0f);
+
+            // 标题 / 副标题（居中于卡片底部）
+            ImFont* font = ImGui::GetFont();
+            if (font != nullptr)
+            {
+                const char* titleText = (titles != nullptr) ? titles[index] : nullptr;
+                const char* subtitleText = (subtitles != nullptr) ? subtitles[index] : nullptr;
+                float textBottom = cardMax.y - 10.0f;
+
+                if (subtitleText != nullptr && subtitleText[0] != '\0')
                 {
-                    continue; // 0 层只画一次（sign = -1 那一轮）
+                    const float subtitleSize = tokens.typography.label;
+                    const ImVec2 extent = font->CalcTextSizeA(subtitleSize, cardWidth - 16.0f,
+                                                              cardWidth - 16.0f, subtitleText);
+                    drawList->AddText(font, subtitleSize,
+                                      ImVec2(cardMin.x + (cardWidth - extent.x) * 0.5f,
+                                             textBottom - extent.y),
+                                      IM_COL32(255, 255, 255, (int)(204.0f * edgeAlpha)), subtitleText);
+                    textBottom -= extent.y + 2.0f;
                 }
-
-                const int slotIndex = sign * depth;
-                const int index = ((visualCenter + slotIndex) % count + count) % count;
-                const float slot = static_cast<float>(slotIndex) + fractionalSlot;
-
-                // 环绕后可能与已绘制卡片重复（count 小于 5 时），跳过
-                bool duplicated = false;
-                for (int drawn = 0; drawn < drawnCount; ++drawn)
+                if (titleText != nullptr && titleText[0] != '\0')
                 {
-                    if (drawnIndices[drawn] == index)
-                    {
-                        duplicated = true;
-                        break;
-                    }
-                }
-                if (duplicated || std::fabs(slot) > 2.5f)
-                {
-                    continue;
-                }
-                if (drawnCount < 5)
-                {
-                    drawnIndices[drawnCount++] = index;
-                }
-
-                // 距离越远越小：中心 1.0，相邻 0.82
-                const float distance = std::fabs(slot);
-                const float cardScale = (distance < 0.5f) ? 1.0f : 0.82f;
-                const float cardWidth = baseWidth * cardScale;
-                const float cardHeight = baseHeight * cardScale;
-                const float cardCenterX = centerX + slot * slotOffset;
-                // tilt（card_slider.h:66）：侧边卡片轻微上下错开，营造倾斜层次
-                const float tiltOffsetY =
-                    (options.tilt && cardScale < 0.9f) ? ((slot > 0.0f) ? 8.0f : -8.0f) : 0.0f;
-                const ImVec2 cardMin(cardCenterX - cardWidth * 0.5f,
-                                     centerY - cardHeight * 0.5f + tiltOffsetY);
-                const ImVec2 cardMax(cardMin.x + cardWidth, cardMin.y + cardHeight);
-                if (cardMax.x < pos.x || cardMin.x > maxPos.x)
-                {
-                    continue;
-                }
-
-                // 阴影：只给近处卡片绘制
-                if (distance <= 1.5f)
-                {
-                    GuiShadowStyle shadowStyle;
-                    shadowStyle.blur = 20.0f;
-                    shadowStyle.offsetX = 0.0f;
-                    shadowStyle.offsetY = 10.0f;
-                    shadowStyle.color = GuiColor(0.0f, 0.0f, 0.0f, 0.30f);
-                    DrawGuiSoftShadow(drawList, cardMin, ImVec2(cardWidth, cardHeight),
-                                      shadowStyle, tokens.radius.card);
-                }
-
-                // 卡片主体：有纹理则绘制圆角图片，否则用表面色占位
-                const float cardRounding = tokens.radius.card;
-                const Texture2D texture = (textures != nullptr) ? textures[index] : nullptr;
-                if (texture != nullptr)
-                {
-                    drawList->AddImageRounded((ImTextureID)texture, cardMin, cardMax,
-                                              ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f),
-                                              IM_COL32_WHITE, cardRounding);
-                }
-                else
-                {
-                    drawList->AddRectFilled(cardMin, cardMax, tokens.surfaceHover.ToImU32(), cardRounding);
-                }
-
-                // 底部半透明 overlay：保证文字可读
-                const float overlayHeight = cardHeight * 0.42f;
-                const ImVec2 overlayMin(cardMin.x, cardMax.y - overlayHeight);
-                drawList->AddRectFilledMultiColor(overlayMin, cardMax,
-                                                  IM_COL32(0, 0, 0, 0), IM_COL32(0, 0, 0, 0),
-                                                  IM_COL32(0, 0, 0, 190), IM_COL32(0, 0, 0, 190));
-
-                drawList->AddRect(cardMin, cardMax, WithAlpha(tokens.border, 0.42f).ToImU32(),
-                                  cardRounding, ImDrawFlags_RoundCornersAll, 1.0f);
-
-                // 标题 / 副标题（居中于卡片底部）
-                ImFont* font = ImGui::GetFont();
-                if (font != nullptr)
-                {
-                    const char* titleText = (titles != nullptr) ? titles[index] : nullptr;
-                    const char* subtitleText = (subtitles != nullptr) ? subtitles[index] : nullptr;
-                    float textBottom = cardMax.y - 10.0f;
-
-                    if (subtitleText != nullptr && subtitleText[0] != '\0')
-                    {
-                        const float subtitleSize = tokens.typography.label;
-                        const ImVec2 extent = font->CalcTextSizeA(subtitleSize, cardWidth - 16.0f,
-                                                                  cardWidth - 16.0f, subtitleText);
-                        drawList->AddText(font, subtitleSize,
-                                          ImVec2(cardMin.x + (cardWidth - extent.x) * 0.5f,
-                                                 textBottom - extent.y),
-                                          IM_COL32(255, 255, 255, 204), subtitleText);
-                        textBottom -= extent.y + 2.0f;
-                    }
-                    if (titleText != nullptr && titleText[0] != '\0')
-                    {
-                        const float titleSize = tokens.typography.subtitle;
-                        const ImVec2 extent = font->CalcTextSizeA(titleSize, cardWidth - 16.0f,
-                                                                  cardWidth - 16.0f, titleText);
-                        drawList->AddText(font, titleSize,
-                                          ImVec2(cardMin.x + (cardWidth - extent.x) * 0.5f,
-                                                 textBottom - extent.y),
-                                          IM_COL32(255, 255, 255, 250), titleText);
-                    }
+                    const float titleSize = tokens.typography.subtitle;
+                    const ImVec2 extent = font->CalcTextSizeA(titleSize, cardWidth - 16.0f,
+                                                              cardWidth - 16.0f, titleText);
+                    drawList->AddText(font, titleSize,
+                                      ImVec2(cardMin.x + (cardWidth - extent.x) * 0.5f,
+                                             textBottom - extent.y),
+                                      IM_COL32(255, 255, 255, (int)(250.0f * edgeAlpha)), titleText);
                 }
             }
         }

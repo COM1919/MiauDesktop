@@ -311,6 +311,120 @@ protected:
         }
 
         // =========================================================================
+        // EUI-NEO v0.6.3 同步能力：虚拟化表格 / 原生对话框 / 实时曲线
+        // =========================================================================
+        ImGui::TextDisabled("v0.6.3 同步（GuiDatatableEx / GuiSaveFileDialog / DrawGuiLineChartLive）");
+
+        // 惰性构造 500 行演示数据（排序 / 筛选 / 虚拟化都在控件内部完成）
+        if (m_tableRows.empty())
+        {
+            static const char* kNames[] = { "同步器", "渲染器", "调度中心", "音频管线", "网络任务" };
+            m_tableRows.reserve(500);
+            for (int index = 0; index < 500; ++index)
+            {
+                m_tableRows.push_back({
+                    std::to_string(index + 1),
+                    kNames[index % (sizeof(kNames) / sizeof(kNames[0]))],
+                    std::to_string(1000 - index * 3),
+                    std::to_string(index % 100),
+                });
+            }
+        }
+
+        GuiBase::GuiInputText("##gallery_table_filter", &m_tableFilter, ImVec2(240.0f, 0.0f));
+        ImGui::SameLine();
+        ImGui::Text("全列筛选：%s", m_tableFilter.empty() ? "（空）" : m_tableFilter.c_str());
+        ImGui::SameLine();
+        if (GuiBase::GuiButton("保存文件##gallery_save", ImVec2(110.0f, 30.0f)))
+        {
+            GuiBase::GuiFileDialogOptions dialogOptions;
+            dialogOptions.title = "导出表格数据";
+            dialogOptions.suggestedName = "table.csv";
+            dialogOptions.defaultExtension = "csv";
+            static const GuiBase::GuiFileDialogFilter kFilters[] = {
+                { "CSV 文件", "*.csv" },
+                { "所有文件", "*.*" },
+            };
+            dialogOptions.filters = kFilters;
+            dialogOptions.filterCount = 2;
+            const GuiBase::GuiFileDialogResult result = GuiBase::GuiSaveFileDialog(dialogOptions);
+            if (result.status == GuiBase::GuiFileDialogStatus::Selected)
+            {
+                m_lastDialogPath = result.path;
+            }
+            else if (result.status == GuiBase::GuiFileDialogStatus::Failed)
+            {
+                m_lastDialogPath = "保存对话框失败：" + result.error;
+            }
+        }
+        ImGui::SameLine();
+        if (GuiBase::GuiButton("选择目录##gallery_directory", ImVec2(110.0f, 30.0f)))
+        {
+            GuiBase::GuiFileDialogOptions dialogOptions;
+            dialogOptions.title = "选择导出目录";
+            const GuiBase::GuiFileDialogResult result = GuiBase::GuiSelectDirectoryDialog(dialogOptions);
+            if (result.status == GuiBase::GuiFileDialogStatus::Selected)
+            {
+                m_lastDialogPath = result.path;
+            }
+            else if (result.status == GuiBase::GuiFileDialogStatus::Failed)
+            {
+                m_lastDialogPath = "目录对话框失败：" + result.error;
+            }
+        }
+        if (!m_lastDialogPath.empty())
+        {
+            ImGui::Text("上次选择：%s", m_lastDialogPath.c_str());
+        }
+
+        {
+            static const char* kTableHeaders[] = { "序号", "名称", "大小 (KB)", "队列" };
+            GuiBase::GuiDatatableOptions tableOptions;
+            tableOptions.rowHeight = 30.0f;
+            tableOptions.filter = m_tableFilter;
+            tableOptions.numericSort = true;
+            tableOptions.onRowClick = [this](std::size_t row)
+            {
+                m_selectedTableRow = static_cast<int>(row);
+            };
+            GuiBase::GuiDatatableEx("##gallery_table", kTableHeaders, 4, m_tableRows,
+                                    ImVec2(0.0f, 260.0f), tableOptions);
+            ImGui::Text("点击表头排序 / 拖动列边界调宽 / 行点击：%d（共 500 行，虚拟化滚动）",
+                        m_selectedTableRow);
+        }
+
+        // 4000 个采样点的实时曲线：每帧按控件宽度降采样到约 4 个点/像素
+        if (m_liveValues.empty())
+        {
+            m_liveValues.assign(4000, 0.5f);
+        }
+        const double now = ImGui::GetTime();
+        if (now - m_liveSampleTime >= 1.0 / 60.0)
+        {
+            m_liveSampleTime = now;
+            for (std::size_t index = 0; index < m_liveValues.size(); ++index)
+            {
+                const float t = static_cast<float>(now) + static_cast<float>(index) * 0.002f;
+                m_liveValues[index] = 0.5f + 0.30f * std::sin(t * 2.3f) + 0.10f * std::sin(t * 19.0f);
+            }
+        }
+        {
+            const ImVec2 livePos = ImGui::GetCursorScreenPos();
+            const ImVec2 liveSize(fullWidth, 170.0f);
+            GuiBase::GuiLineChartLiveOptions liveOptions;
+            liveOptions.last = m_liveValues.size();
+            liveOptions.minimum = 0.0f;
+            liveOptions.maximum = 1.0f;
+            liveOptions.lineThickness = 2.0f;
+            GuiBase::DrawGuiLineChartLive(ImGui::GetWindowDrawList(), livePos, liveSize,
+                                          m_liveValues.data(),
+                                          static_cast<int>(m_liveValues.size()),
+                                          "实时曲线（4000 采样点 · 像素桶降采样）",
+                                          GuiBase::GuiChartStyle(), liveOptions);
+            ImGui::Dummy(liveSize);
+        }
+
+        // =========================================================================
         // 抽屉（最后绘制，保证处于最上层）
         // =========================================================================
         const ImVec2 savedCursor = ImGui::GetCursorScreenPos();
@@ -353,4 +467,12 @@ private:
     double m_toastUntil = 0.0;
     int m_carouselIndex = 0;
     float m_markdownOffset = 0.0f;
+
+    // EUI-NEO v0.6.3 同步演示状态
+    std::string m_tableFilter;
+    std::vector<std::vector<std::string>> m_tableRows;
+    int m_selectedTableRow = -1;
+    std::string m_lastDialogPath;
+    std::vector<float> m_liveValues;
+    double m_liveSampleTime = 0.0;
 };

@@ -110,6 +110,9 @@ int RenderGui(HINSTANCE hInstance)
     HWND hProgman = FindWindowW(L"Progman", NULL);
     if (hProgman) // 将窗口的 Owner 设置为桌面，注意这里用的是 GWLP_HWNDPARENT 而不是 SetParent
         SetWindowLongPtr(g_hWnd, GWLP_HWNDPARENT, (LONG_PTR)hProgman);
+#else
+	// 窗口置顶显示，方便调试 UI
+	SetWindowPos(g_hWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
 #endif // MD_TOPSHOW
 
     // 初始化 Direct3D
