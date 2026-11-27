@@ -127,7 +127,7 @@ namespace GuiBase
         const float rounding = tokens.radius.section;
         drawList->AddRectFilled(pos, maxPos, NavbarColor(tokens).ToImU32(), rounding);
         drawList->AddRect(pos, maxPos, WithAlpha(tokens.border, 0.62f).ToImU32(),
-                          rounding, ImDrawFlags_RoundCornersAll, 1.0f);
+                          rounding, 1.0f, ImDrawFlags_RoundCornersAll);
 
         ImFont* font = ImGui::GetFont();
 
@@ -204,7 +204,7 @@ namespace GuiBase
             drawList->AddRect(itemMin, itemMax,
                               WithAlpha(active ? tokens.primary : tokens.border,
                                         active ? 0.58f : 0.70f).ToImU32(),
-                              itemRounding, ImDrawFlags_RoundCornersAll, 1.0f);
+                              itemRounding, 1.0f, ImDrawFlags_RoundCornersAll);
 
             // 选中指示条：左侧 4px primary 竖条
             if (active)
@@ -274,7 +274,7 @@ namespace GuiBase
                 GuiColor footerBg = MixColor(tokens.surface, tokens.surfaceHover, footerHovered ? 0.75f : 0.0f);
                 drawList->AddRectFilled(footerMin, footerMax, footerBg.ToImU32(), tokens.radius.card);
                 drawList->AddRect(footerMin, footerMax, WithAlpha(tokens.border, 0.70f).ToImU32(),
-                                  tokens.radius.card, ImDrawFlags_RoundCornersAll, 1.0f);
+                                  tokens.radius.card, 1.0f, ImDrawFlags_RoundCornersAll);
 
                 const float iconSize = compact ? tokens.spacing.large : tokens.spacing.section;
                 const float iconBoxWidth = iconSize + tokens.spacing.compact;

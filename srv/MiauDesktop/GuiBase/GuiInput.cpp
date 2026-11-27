@@ -79,7 +79,7 @@ namespace GuiBase
             // 绘制整体边框
             draw->AddRect(origin, ImVec2(origin.x + columnWidth, origin.y + height),
                 WithAlpha(tokens.border, 0.78f).ToImU32(),
-                tokens.radius.control, ImDrawFlags_RoundCornersAll, 1.0f);
+                tokens.radius.control, 1.0f, ImDrawFlags_RoundCornersAll);
 
             // 绘制居中文本
             const ImVec2 textSize = ImGui::CalcTextSize(text);
@@ -275,7 +275,7 @@ namespace GuiBase
             tokens.radius.control);
         draw->AddRect(fieldPos, fieldPos + fieldSize,
             WithAlpha(tokens.border, 0.78f).ToImU32(),
-            tokens.radius.control, ImDrawFlags_RoundCornersAll, 1.0f);
+            tokens.radius.control, 1.0f, ImDrawFlags_RoundCornersAll);
 
         // 绘制当前选中项文本（左对齐，无选中时用弱化文字色）
         const ImVec2 textSize = ImGui::CalcTextSize(currentText);
@@ -388,7 +388,7 @@ namespace GuiBase
             current.ToImU32(), tokens.radius.small);
         draw->AddRect(previewPos, ImVec2(previewPos.x + previewWidth, previewPos.y + previewHeight),
             WithAlpha(tokens.border, 0.78f).ToImU32(),
-            tokens.radius.small, ImDrawFlags_RoundCornersAll, 1.0f);
+            tokens.radius.small, 1.0f, ImDrawFlags_RoundCornersAll);
 
         // 色块右侧显示 HEX 文本（忽略 alpha）
         char hexText[16];
@@ -644,8 +644,7 @@ namespace GuiBase
 
         // 边框：聚焦时用 primary 高亮，否则 border 常规色
         const GuiColor borderColor = active ? tokens.primary : WithAlpha(tokens.border, 0.70f);
-        drawList->AddRect(pos, maxPos, borderColor.ToImU32(), rounding, ImDrawFlags_RoundCornersAll,
-                          active ? 1.5f : 1.0f);
+        drawList->AddRect(pos, maxPos, borderColor.ToImU32(), rounding, active ? 1.5f : 1.0f, ImDrawFlags_RoundCornersAll);
 
         // 占位符：空值且未聚焦时绘制
         if (options.placeholder != nullptr && options.placeholder[0] != '\0' &&

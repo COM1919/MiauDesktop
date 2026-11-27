@@ -3,26 +3,12 @@
 #include "../Component.h"
 #include "../GuiBase/GuiBase.h"
 
-// 进程信息结构体
-static struct ProcessInfo
-{
-    DWORD pid = 0;
-    std::string name;               // UTF-8 进程名称
-    std::wstring exePath;           // 进程可执行文件路径（用于获取图标）
-    float cpuUsage = 0.0f;          // 百分比
-    SIZE_T memUsage = 0;            // 字节
-    float gpuUsage = 0.0f;          // 百分比
-    float diskMBps = 0.0f;          // 读写总速度 MB/s
-    int   networkConns = 0;         // 已建立的 TCP 连接数（网络活动指标）
-
-    // 上次采样的 CPU 时间
-    ULONGLONG prevProcKernel = 0;
-    ULONGLONG prevProcUser = 0;
-    // 上次采样的 IO 字节数
-    ULONGLONG prevReadBytes = 0;
-    ULONGLONG prevWriteBytes = 0;
-};
-
+// =============================================================================
+// PerformanceMonitor：进程管理器
+// 说是管理器，确实就是个进程查看的，也许会添加管理功能，
+// 但是想了想好像不太符合“桌面组件”的理念，
+// 这也算是一个半废弃组件吧，没啥用途。
+// =============================================================================
 class ProcessManager : public Component
 {
 public:
@@ -131,172 +117,178 @@ protected:
             m_lastRefreshTick = now;
         }
 
-        // 使用全局 ImGuiStyle 默认配色（TableHeaderBg/TableRowBg/Text 等已在 SetupImGuiStyle 定义），
-        // 组件不再 PushStyleColor，方便后续添加组件
+        // 使用全局 ImGuiStyle 默认配色 + GuiBase 主题令牌，组件不再 PushStyleColor
+        const GuiBase::GuiThemeTokens tokens = GuiBase::Theme::Dark();
 
         ImGui::Spacing();
 
-        // === 进程列表表格 ===
-        ImGuiTableFlags tableFlags = ImGuiTableFlags_Resizable
-            | ImGuiTableFlags_Sortable
-            | ImGuiTableFlags_ScrollY
-            | ImGuiTableFlags_RowBg
-            | ImGuiTableFlags_BordersInnerV
-            | ImGuiTableFlags_SizingStretchProp;
+        // === 列定义（visible 由列显示开关驱动，GuiBase 内部按可见列编号）===
+        GuiBase::GuiTableColumn columns[8];
+        int columnCount = 0;
+        columns[columnCount++] = { "##Icon", 28.0f, ImGuiTableColumnFlags_NoResize, true };
+        columns[columnCount++] = { "名称", 0.0f, 0, true };
+        columns[columnCount++] = { "PID", 60.0f, 0, m_showPid };
+        columns[columnCount++] = { "CPU", 90.0f, 0, m_showCpu };
+        columns[columnCount++] = { "内存", 115.0f, ImGuiTableColumnFlags_DefaultSort, m_showMemory };
+        columns[columnCount++] = { "GPU", 80.0f, 0, m_showGpu };
+        columns[columnCount++] = { "储存", 80.0f, 0, m_showDisk };
+        columns[columnCount++] = { "网络", 80.0f, 0, m_showNetwork };
 
-        if (ImGui::BeginTable("##ProcessTable", GetVisibleColumnCount(), tableFlags, ImVec2(0, ImGui::GetContentRegionAvail().y)))
+        GuiBase::GuiTableOptions tableOptions;
+        tableOptions.sortable = true;
+        tableOptions.resizable = true;
+        tableOptions.rowBackground = true;
+        tableOptions.bordersInnerV = true;
+        tableOptions.scrollY = true;
+        tableOptions.size = ImVec2(0.0f, 0.0f); // 填满可用区域
+
+        if (!GuiBase::BeginGuiTable("##ProcessTable", columns, columnCount, tableOptions))
+            return;
+
+        GuiBase::GuiTableHeadersRow();
+
+        // 表头右键：列显示开关（GuiBase 内部用 GuiCheckbox 绘制）
+        const GuiBase::GuiTableColumnToggle columnToggles[] = {
+            { "PID", &m_showPid },
+            { "CPU", &m_showCpu },
+            { "内存", &m_showMemory },
+            { "GPU", &m_showGpu },
+            { "储存", &m_showDisk },
+            { "网络", &m_showNetwork },
+        };
+        GuiBase::GuiTableHeaderColumnMenu("##ColumnSelector", columnToggles, IM_ARRAYSIZE(columnToggles));
+
+        // 处理排序：GuiBase 读取 ImGui 表头排序规格，列号为可见列序号
+        int sortColumn = -1;
+        bool sortAscending = false;
+        if (GuiBase::GuiTableConsumeSort(&sortColumn, &sortAscending))
         {
-            int colIdx = 0;
-
-            // 图标列（固定宽度，始终显示）
-            ImGui::TableSetupColumn("##Icon", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoResize, 28.0f, colIdx++);
-            // 进程名称列（可拉伸）
-            ImGui::TableSetupColumn("名称", ImGuiTableColumnFlags_WidthStretch, 0.0f, colIdx++);
-            if (m_showPid)
-                ImGui::TableSetupColumn("PID", ImGuiTableColumnFlags_WidthFixed, 60.0f, colIdx++);
-            if (m_showCpu)
-                ImGui::TableSetupColumn("CPU", ImGuiTableColumnFlags_WidthFixed, 90.0f, colIdx++);
-            if (m_showMemory)
-                ImGui::TableSetupColumn("内存", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_DefaultSort, 115.0f, colIdx++);
-            if (m_showGpu)
-                ImGui::TableSetupColumn("GPU", ImGuiTableColumnFlags_WidthFixed, 80.0f, colIdx++);
-            if (m_showDisk)
-                ImGui::TableSetupColumn("储存", ImGuiTableColumnFlags_WidthFixed, 80.0f, colIdx++);
-            if (m_showNetwork)
-                ImGui::TableSetupColumn("网络", ImGuiTableColumnFlags_WidthFixed, 80.0f, colIdx++);
-
-            ImGui::TableHeadersRow();
-
-            // 右键表头弹出列选择菜单
-            if (ImGui::IsMouseReleased(1) && ImGui::IsItemHovered())
-                ImGui::OpenPopup("##ColumnSelector");
-
-            if (ImGui::BeginPopup("##ColumnSelector"))
-            {
-                ImGui::TextDisabled("列设置");
-                ImGui::Separator();
-                ImGui::MenuItem("PID", nullptr, &m_showPid);
-                ImGui::MenuItem("CPU", nullptr, &m_showCpu);
-                ImGui::MenuItem("内存", nullptr, &m_showMemory);
-                ImGui::MenuItem("GPU", nullptr, &m_showGpu);
-                ImGui::MenuItem("储存", nullptr, &m_showDisk);
-                ImGui::MenuItem("网络", nullptr, &m_showNetwork);
-                ImGui::EndPopup();
-            }
-
-            // 处理排序：如果用户点击了表头，使用 ImGui 的排序规格
-            if (ImGuiTableSortSpecs* sortSpecs = ImGui::TableGetSortSpecs())
-            {
-                if (sortSpecs->SpecsDirty && sortSpecs->SpecsCount > 0)
-                {
-                    const auto& spec = sortSpecs->Specs[0];
-                    m_sortColumn = (int)spec.ColumnIndex;
-                    m_sortAscending = (spec.SortDirection == ImGuiSortDirection_Ascending);
-                    SortProcesses();
-                    sortSpecs->SpecsDirty = false;
-                }
-            }
-
-            // 数据行（使用 ImGuiListClipper 实现虚拟滚动）
-            ImGuiListClipper clipper;
-            clipper.Begin((int)m_processes.size());
-            while (clipper.Step())
-            {
-                for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
-                {
-                    const auto& proc = m_processes[i];
-                    ImGui::TableNextRow();
-
-                    colIdx = 0;
-
-                    // 系统图标
-                    ImGui::TableSetColumnIndex(colIdx++);
-                    Texture2D iconTex = GetProcessIconTexture(proc);
-                    if (iconTex)
-                    {
-                        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 9.0f); // 实际是使用截图工具慢慢搞出来的
-                        ImGui::Image((ImTextureID)iconTex, ImVec2(24, 24));
-                    }
-                    else
-                    {
-                        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 11.0f); // 实际是使用截图工具慢慢搞出来的
-                        ImGui::PushStyleColor(ImGuiCol_Text, GetProcessColor(proc.name));
-                        {
-                            ImGui::SetWindowFontScale(1.2f);
-                            ImGui::TextUnformatted(ICON_FA_BOX_ARCHIVE);
-                            ImGui::SetWindowFontScale(1.0f);
-                        }
-                        ImGui::PopStyleColor();
-                    }
-
-                    // 进程名称
-                    ImGui::TableSetColumnIndex(colIdx++);
-                    ImGui::AlignTextToFramePadding();
-                    ImGui::TextUnformatted(proc.name.c_str());
-
-                    if (m_showPid)
-                    {
-                        ImGui::TableSetColumnIndex(colIdx++);
-                        ImGui::AlignTextToFramePadding();
-                        ImGui::Text("%u", proc.pid);
-                    }
-                    if (m_showCpu)
-                    {
-                        ImGui::TableSetColumnIndex(colIdx++);
-                        ImGui::AlignTextToFramePadding();
-                        // CPU 迷你进度条（EUI-NEO progress 风格，Blue 调色板）
-                        DrawCellProgressBar(proc.cpuUsage / 100.0f, 44.0f, GuiBase::GuiColor(0.22f, 0.50f, 0.88f, 1.0f));
-                        // CPU 使用率高的用高亮色
-                        if (proc.cpuUsage > 10.0f)
-                            ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "%.0f%%", proc.cpuUsage);
-                        else
-                            ImGui::Text("%.0f%%", proc.cpuUsage);
-                    }
-                    if (m_showMemory)
-                    {
-                        ImGui::TableSetColumnIndex(colIdx++);
-                        ImGui::AlignTextToFramePadding();
-                        // 内存迷你进度条（Green 调色板），按占总内存比例显示
-                        float memRatio = m_totalMemBytes > 0
-                            ? (float)((double)proc.memUsage / (double)m_totalMemBytes) : 0.0f;
-                        DrawCellProgressBar(memRatio, 58.0f, GuiBase::GuiColor(0.20f, 0.76f, 0.58f, 1.0f));
-                        ImGui::TextUnformatted(FormatMemory(proc.memUsage).c_str());
-                    }
-                    if (m_showGpu)
-                    {
-                        ImGui::TableSetColumnIndex(colIdx++);
-                        ImGui::AlignTextToFramePadding();
-                        // GPU 迷你进度条（Orange 调色板）
-                        DrawCellProgressBar(proc.gpuUsage / 100.0f, 34.0f, GuiBase::GuiColor(0.98f, 0.62f, 0.15f, 1.0f));
-                        ImGui::Text("%.0f%%", proc.gpuUsage);
-                    }
-                    if (m_showDisk)
-                    {
-                        ImGui::TableSetColumnIndex(colIdx++);
-                        ImGui::AlignTextToFramePadding();
-                        if (proc.diskMBps > 0.01f)
-                            ImGui::Text("%.1f MB/s", proc.diskMBps);
-                        else
-                            ImGui::TextDisabled("0 MB/s");
-                    }
-                    if (m_showNetwork)
-                    {
-                        ImGui::TableSetColumnIndex(colIdx++);
-                        ImGui::AlignTextToFramePadding();
-                        if (proc.networkConns > 0)
-                            ImGui::Text("%d 连接", proc.networkConns);
-                        else
-                            ImGui::TextDisabled("0");
-                    }
-                }
-            }
-            clipper.End();
-
-            ImGui::EndTable();
+            m_sortColumn = sortColumn;
+            m_sortAscending = sortAscending;
+            SortProcesses();
         }
+
+        // === 数据行（GuiBase 内部用 ImGuiListClipper 虚拟化）===
+        GuiBase::GuiTableRows((int)m_processes.size(), [&](int rowIndex)
+        {
+            const ProcessInfo& proc = m_processes[(size_t)rowIndex];
+            GuiBase::GuiTableNextRow();
+
+            int column = 0;
+
+            // 系统图标
+            GuiBase::GuiTableCell(column++, false);
+            Texture2D iconTex = GetProcessIconTexture(proc);
+            if (iconTex)
+            {
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 9.0f);
+                GuiBase::GuiImage("##icon", iconTex, ImVec2(24.0f, 24.0f));
+            }
+            else
+            {
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 11.0f);
+                GuiBase::GuiText("##icon_char", ICON_FA_BOX_ARCHIVE, ImGui::GetFontSize() * 1.2f, GetProcessColor(proc.name));
+            }
+
+            // 进程名称
+            GuiBase::GuiTableCell(column++);
+            GuiBase::GuiText("##name", proc.name.c_str(), 0.0f, tokens.text);
+
+            if (m_showPid)
+            {
+                GuiBase::GuiTableCell(column++);
+                const std::string pidText = std::to_string(proc.pid);
+                GuiBase::GuiText("##pid", pidText.c_str(), 0.0f, tokens.text);
+            }
+            if (m_showCpu)
+            {
+                GuiBase::GuiTableCell(column++);
+                // CPU 迷你进度条（EUI-NEO progress 风格，Blue 调色板）
+                GuiBase::GuiTableCellProgress(proc.cpuUsage / 100.0f, 44.0f,
+                                              GuiBase::GuiColor(0.22f, 0.50f, 0.88f, 1.0f), tokens.surfaceHover);
+                char cpuText[16];
+                snprintf(cpuText, sizeof(cpuText), "%.0f%%", proc.cpuUsage);
+                // CPU 使用率高的用高亮色
+                const GuiBase::GuiColor cpuColor = (proc.cpuUsage > 10.0f)
+                    ? GuiBase::GuiColor(1.0f, 0.6f, 0.2f, 1.0f)
+                    : tokens.text;
+                GuiBase::GuiText("##cpu", cpuText, 0.0f, cpuColor);
+            }
+            if (m_showMemory)
+            {
+                GuiBase::GuiTableCell(column++);
+                // 内存迷你进度条（Green 调色板），按占总内存比例显示
+                const float memRatio = m_totalMemBytes > 0
+                    ? (float)((double)proc.memUsage / (double)m_totalMemBytes) : 0.0f;
+                GuiBase::GuiTableCellProgress(memRatio, 58.0f,
+                                              GuiBase::GuiColor(0.20f, 0.76f, 0.58f, 1.0f), tokens.surfaceHover);
+                const std::string memText = FormatMemory(proc.memUsage);
+                GuiBase::GuiText("##memory", memText.c_str(), 0.0f, tokens.text);
+            }
+            if (m_showGpu)
+            {
+                GuiBase::GuiTableCell(column++);
+                // GPU 迷你进度条（Orange 调色板）
+                GuiBase::GuiTableCellProgress(proc.gpuUsage / 100.0f, 34.0f,
+                                              GuiBase::GuiColor(0.98f, 0.62f, 0.15f, 1.0f), tokens.surfaceHover);
+                char gpuText[16];
+                snprintf(gpuText, sizeof(gpuText), "%.0f%%", proc.gpuUsage);
+                GuiBase::GuiText("##gpu", gpuText, 0.0f, tokens.text);
+            }
+            if (m_showDisk)
+            {
+                GuiBase::GuiTableCell(column++);
+                if (proc.diskMBps > 0.01f)
+                {
+                    char diskText[32];
+                    snprintf(diskText, sizeof(diskText), "%.1f MB/s", proc.diskMBps);
+                    GuiBase::GuiText("##disk", diskText, 0.0f, tokens.text);
+                }
+                else
+                {
+                    GuiBase::GuiText("##disk", "0 MB/s", 0.0f, GuiBase::WithAlpha(tokens.text, 0.55f));
+                }
+            }
+            if (m_showNetwork)
+            {
+                GuiBase::GuiTableCell(column++);
+                if (proc.networkConns > 0)
+                {
+                    char netText[32];
+                    snprintf(netText, sizeof(netText), "%d 连接", proc.networkConns);
+                    GuiBase::GuiText("##network", netText, 0.0f, tokens.text);
+                }
+                else
+                {
+                    GuiBase::GuiText("##network", "0", 0.0f, GuiBase::WithAlpha(tokens.text, 0.55f));
+                }
+            }
+        });
+
+        GuiBase::EndGuiTable();
     }
 
 private:
+    // 进程信息结构体
+    struct ProcessInfo
+    {
+        DWORD pid = 0;
+        std::string name;               // UTF-8 进程名称
+        std::wstring exePath;           // 进程可执行文件路径（用于获取图标）
+        float cpuUsage = 0.0f;          // 百分比
+        SIZE_T memUsage = 0;            // 字节
+        float gpuUsage = 0.0f;          // 百分比
+        float diskMBps = 0.0f;          // 读写总速度 MB/s
+        int   networkConns = 0;         // 已建立的 TCP 连接数（网络活动指标）
+
+        // 上次采样的 CPU 时间
+        ULONGLONG prevProcKernel = 0;
+        ULONGLONG prevProcUser = 0;
+        // 上次采样的 IO 字节数
+        ULONGLONG prevReadBytes = 0;
+        ULONGLONG prevWriteBytes = 0;
+    };
+
     std::vector<ProcessInfo> m_processes;
     DWORD m_lastRefreshTick = 0;
     SIZE_T m_totalMemBytes = 0;  // 物理内存总量（用于内存列迷你进度条比例）
@@ -304,22 +296,6 @@ private:
     // 排序状态（-1 表示未点击表头，使用默认排序：内存降序）
     int m_sortColumn = -1;
     bool m_sortAscending = false;
-
-    // 在单元格内绘制 EUI 迷你胶囊进度条（参照 EUI-NEO progress 组件：
-    // 胶囊形圆角 = height*0.5，track 使用 surfaceHover 色）
-    void DrawCellProgressBar(float value, float barWidth, const GuiBase::GuiColor& fillColor)
-    {
-        ImDrawList* dl = ImGui::GetWindowDrawList();
-        ImVec2 p = ImGui::GetCursorScreenPos();
-        const float barH = 6.0f;
-        // 垂直居中于文本行
-        float y = p.y + (ImGui::GetTextLineHeight() - barH) * 0.5f;
-        GuiBase::GuiColor track(0.25f, 0.25f, 0.28f, 1.0f);  // EUI surfaceHover
-        GuiBase::DrawGuiProgress(dl, ImVec2(p.x, y), ImVec2(barWidth, barH),
-                        std::clamp(value, 0.0f, 1.0f), fillColor, track);
-        // 光标向右推进，供后续百分比文字同行显示（不改变 Y，避免错行）
-        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + barWidth + ImGui::GetStyle().ItemSpacing.x);
-    }
 
     ULONGLONG m_prevSysKernel = 0;
     ULONGLONG m_prevSysUser = 0;
@@ -429,18 +405,6 @@ private:
                 }
             }
         }
-    }
-
-    int GetVisibleColumnCount() const
-    {
-        int count = 2;
-        if (m_showPid) count++;
-        if (m_showCpu) count++;
-        if (m_showMemory) count++;
-        if (m_showGpu) count++;
-        if (m_showDisk) count++;
-        if (m_showNetwork) count++;
-        return count;
     }
 
     // 排序：根据当前排序列和方向对 m_processes 排序
@@ -600,15 +564,15 @@ private:
         return GuiBase::LoadTexture(pixels.data(), w, h, nullptr, nullptr, texId.c_str());
     }
 
-    static ImVec4 GetProcessColor(const std::string& name)
+    static GuiBase::GuiColor GetProcessColor(const std::string& name)
     {
         std::string lower = name;
         for (auto& c : lower) c = (char)tolower((unsigned char)c);
 
-        if (lower.find("explorer") != std::string::npos)  return ImVec4(1.0f, 0.85f, 0.4f, 1.0f);
-        if (lower.find("chrome") != std::string::npos)    return ImVec4(0.26f, 0.73f, 0.96f, 1.0f);
-        if (lower.find("code") != std::string::npos)      return ImVec4(0.3f, 0.6f, 1.0f, 1.0f);
-        return ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled);
+        if (lower.find("explorer") != std::string::npos)  return GuiBase::GuiColor(1.0f, 0.85f, 0.4f, 1.0f);
+        if (lower.find("chrome") != std::string::npos)    return GuiBase::GuiColor(0.26f, 0.73f, 0.96f, 1.0f);
+        if (lower.find("code") != std::string::npos)      return GuiBase::GuiColor(0.3f, 0.6f, 1.0f, 1.0f);
+        return GuiBase::WithAlpha(GuiBase::Theme::Dark().text, 0.55f);
     }
 
     // 系统关键进程黑名单：不可交互、与桌面用户无关的内核/会话进程

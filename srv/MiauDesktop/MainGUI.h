@@ -12,6 +12,7 @@ namespace Components
 #include "Components/MusicDisplay.h"
 #include "Components/WeatherDisplay.h"
 #include "Components/TimeDisplay.h"
+#include "Components/TodoList.h"
 #include "Components/GuiGallery.h"
 }
 

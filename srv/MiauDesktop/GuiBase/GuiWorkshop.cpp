@@ -155,7 +155,7 @@ namespace GuiBase
                 const ImVec2 layerMin(min.x - ext + offset.x, min.y - ext + offset.y);
                 const ImVec2 layerMax(max.x + ext + offset.x, max.y + ext + offset.y);
                 drawList->AddRect(layerMin, layerMax, WithAlpha(color, alpha).ToImU32(),
-                                  rounding + ext, ImDrawFlags_RoundCornersAll, step * 2.0f);
+                                  rounding + ext, step * 2.0f, ImDrawFlags_RoundCornersAll);
             }
             drawList->PopClipRect();
         }
@@ -218,7 +218,7 @@ namespace GuiBase
             // 描边：未选中时用 muted 心形色，选中时用亮色描边
             const GuiColor strokeBase = *value ? heartColor : MixColor(tokens.text, heartColor, 0.45f);
             drawList->AddPolyline(points, pointCount, WithAlpha(strokeBase, 0.90f).ToImU32(),
-                                  ImDrawFlags_Closed, std::max(1.5f, heartSize * 0.055f));
+                                  std::max(1.5f, heartSize * 0.055f), ImDrawFlags_Closed);
         }
 
         ImGui::PopID();
@@ -307,7 +307,7 @@ namespace GuiBase
         }
         drawList->AddRectFilled(buttonMin, buttonMax, surface.ToImU32(), radius);
         drawList->AddRect(buttonMin, buttonMax, WithAlpha(surface, 0.90f).ToImU32(),
-                          radius, ImDrawFlags_RoundCornersAll, 1.0f);
+                          radius, 1.0f, ImDrawFlags_RoundCornersAll);
 
         // === 按下内阴影 ===
         if (*pressAnim > 0.01f)
@@ -446,7 +446,7 @@ namespace GuiBase
         const ImVec2 outline[4] = { cornerTL, cornerTR, cornerBR, cornerBL };
         drawList->AddPolyline(outline, 4,
                               WithAlpha(tokens.isDark ? tokens.border : tokens.border, 0.72f).ToImU32(),
-                              ImDrawFlags_Closed, 1.0f);
+                              1.0f, ImDrawFlags_Closed);
 
         // 标题 / 副标题（居中，不做透视变形以保证可读性）
         ImFont* font = ImGui::GetFont();
@@ -699,7 +699,7 @@ namespace GuiBase
                                               IM_COL32(0, 0, 0, overlayAlpha), IM_COL32(0, 0, 0, overlayAlpha));
 
             drawList->AddRect(cardMin, cardMax, WithAlpha(tokens.border, 0.42f * edgeAlpha).ToImU32(),
-                              cardRounding, ImDrawFlags_RoundCornersAll, 1.0f);
+                              cardRounding, 1.0f, ImDrawFlags_RoundCornersAll);
 
             // 标题 / 副标题（居中于卡片底部）
             ImFont* font = ImGui::GetFont();

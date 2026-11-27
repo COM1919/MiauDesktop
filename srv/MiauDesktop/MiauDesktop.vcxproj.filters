@@ -278,6 +278,9 @@
     <ClInclude Include="Components\TimeDisplay.h">
       <Filter>头文件\Components</Filter>
     </ClInclude>
+    <ClInclude Include="Components\TodoList.h">
+      <Filter>头文件\Components</Filter>
+    </ClInclude>
     <ClInclude Include="Components\ProcessManager.h">
       <Filter>头文件\Components</Filter>
     </ClInclude>

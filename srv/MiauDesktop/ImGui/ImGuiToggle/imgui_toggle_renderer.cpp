@@ -541,7 +541,7 @@ void ImGuiToggleRenderer::DrawRectBorder(ImRect bounds, ImU32 color_border, floa
     bounds.Expand(-half_thickness);
 
 #if IMGUI_VERSION_NUM < 19276
-    _drawList->AddRect(bounds.Min, bounds.Max, color_border, rounding, ImDrawFlags_None, thickness);
+    _drawList->AddRect(bounds.Min, bounds.Max, color_border, rounding, thickness, ImDrawFlags_None);
 #else
     _drawList->AddRect(bounds.Min, bounds.Max, color_border, rounding, thickness);
 #endif
@@ -566,7 +566,7 @@ void ImGuiToggleRenderer::DrawRectShadow(ImRect bounds, ImU32 color_shadow, floa
     bounds.Expand(half_thickness);
 
 #if IMGUI_VERSION_NUM < 19276
-    _drawList->AddRect(bounds.Min, bounds.Max, color_shadow, rounding, ImDrawFlags_None, thickness);
+    _drawList->AddRect(bounds.Min, bounds.Max, color_shadow, rounding, thickness, ImDrawFlags_None);
 #else
     _drawList->AddRect(bounds.Min, bounds.Max, color_shadow, rounding, thickness);
 #endif

@@ -206,7 +206,7 @@ namespace GuiBase
                 }
             }
             drawList->AddPolyline(curve.data(), static_cast<int>(curve.size()),
-                                  lineColor, false, lineThickness);
+                                  lineColor, lineThickness, ImDrawFlags_None);
         }
         else if (lineStyle == GuiLineStyle::Step)
         {
@@ -222,12 +222,12 @@ namespace GuiBase
                 step.push_back(to);
             }
             drawList->AddPolyline(step.data(), static_cast<int>(step.size()),
-                                  lineColor, false, lineThickness);
+                                  lineColor, lineThickness, ImDrawFlags_None);
         }
         else
         {
             // Linear：直接连接各点（Curve 但点数不足时同样回退到直线）
-            drawList->AddPolyline(points.data(), count, lineColor, false, lineThickness);
+            drawList->AddPolyline(points.data(), count, lineColor, lineThickness, ImDrawFlags_None);
         }
 
         // 数据点（近似圆，半径 6.5）
@@ -405,7 +405,7 @@ namespace GuiBase
             if (segment.size() >= 2)
             {
                 drawList->AddPolyline(segment.data(), static_cast<int>(segment.size()),
-                                      lineColor, false, thickness);
+                                      lineColor, thickness, ImDrawFlags_None);
             }
             segment.clear();
         };

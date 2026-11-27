@@ -189,11 +189,15 @@ int RenderGui(HINSTANCE hInstance)
     // 注意：一定要在ImGui初始化后才注册，不然Components类使用ImGui::GetIO时，如果ImGui没初始化就会崩溃
     g_compManager.AddComponent(std::make_unique<Components::PerformanceMonitor>());
     g_compManager.AddComponent(std::make_unique<Components::ProcessManager>());
-    g_compManager.AddComponent(std::make_unique<Components::DebugDemo>());
     g_compManager.AddComponent(std::make_unique<Components::MusicDisplay>());
     g_compManager.AddComponent(std::make_unique<Components::WeatherDisplay>());
     g_compManager.AddComponent(std::make_unique<Components::TimeDisplay>());
+    g_compManager.AddComponent(std::make_unique<Components::TodoList>());
+#ifdef MD_DEBUG
+    // 注册调试用的组件
     g_compManager.AddComponent(std::make_unique<Components::GuiGallery>());
+    g_compManager.AddComponent(std::make_unique<Components::DebugDemo>());
+#endif // MD_DEBUG
 
     // 组件注册完毕后再加载各自配置（配置文件在组件注册前已读入内存）
     g_compManager.LoadAllConfigs();
@@ -433,9 +437,9 @@ void SetupImGuiStyle()
     style.Colors[ImGuiCol_ResizeGripActive] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
     style.Colors[ImGuiCol_Tab] = ImVec4(0.078431375f, 0.08627451f, 0.101960786f, 1.0f);
     style.Colors[ImGuiCol_TabHovered] = ImVec4(0.11764706f, 0.13333334f, 0.14901961f, 1.0f);
-    style.Colors[ImGuiCol_TabActive] = ImVec4(0.11764706f, 0.13333334f, 0.14901961f, 1.0f);
-    style.Colors[ImGuiCol_TabUnfocused] = ImVec4(0.078431375f, 0.08627451f, 0.101960786f, 1.0f);
-    style.Colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.1254902f, 0.27450982f, 0.57254905f, 1.0f);
+    style.Colors[ImGuiCol_TabSelected] = ImVec4(0.11764706f, 0.13333334f, 0.14901961f, 1.0f);
+    style.Colors[ImGuiCol_TabDimmed] = ImVec4(0.078431375f, 0.08627451f, 0.101960786f, 1.0f);
+    style.Colors[ImGuiCol_TabDimmedSelected] = ImVec4(0.1254902f, 0.27450982f, 0.57254905f, 1.0f);
     style.Colors[ImGuiCol_PlotLines] = ImVec4(0.52156866f, 0.6f, 0.7019608f, 1.0f);
     style.Colors[ImGuiCol_PlotLinesHovered] = ImVec4(0.039215688f, 0.98039216f, 0.98039216f, 1.0f);
     style.Colors[ImGuiCol_PlotHistogram] = ImVec4(0.88235295f, 0.79607844f, 0.56078434f, 1.0f);

@@ -21,6 +21,8 @@
 
 // CHANGELOG
 // (minor and older changes stripped away, please see git history for details)
+//  2026-05-19: DPI: ImGui_ImplWin32_EnableDpiAwareness() helper uses SetProcessDpiAwarenessContext() instead of SetThreadDpiAwarenessContext(), fixes DPI scaling issues with e.g. OpenGL. (#9403)
+//  2026-01-28: Inputs: Minor optimization not submitting gamepad input if packet number has not changed (reworked from 2025-09-23 attempt). (#9202, #8556)
 //  2025-12-03: Inputs: handle WM_IME_CHAR/WM_IME_COMPOSITION messages to support Unicode inputs on MBCS (non-Unicode) Windows. (#9099, #3653, #5961)
 //  2025-10-19: Inputs: Revert previous change to allow for io.ClearInputKeys() on focus-out not losing gamepad state.
 //  2025-09-23: Inputs: Minor optimization not submitting gamepad input if packet number has not changed.
@@ -127,6 +129,7 @@ struct ImGui_ImplWin32_Data
     HMODULE                     XInputDLL;
     PFN_XInputGetCapabilities   XInputGetCapabilities;
     PFN_XInputGetState          XInputGetState;
+    DWORD                       XInputPacketNumber;
 #endif
 
     ImGui_ImplWin32_Data()      { memset((void*)this, 0, sizeof(*this)); }
@@ -358,6 +361,9 @@ static void ImGui_ImplWin32_UpdateGamepads(ImGuiIO& io)
     if (!bd->HasGamepad || bd->XInputGetState == nullptr || bd->XInputGetState(0, &xinput_state) != ERROR_SUCCESS)
         return;
     io.BackendFlags |= ImGuiBackendFlags_HasGamepad;
+    if (bd->XInputPacketNumber != 0 && bd->XInputPacketNumber == xinput_state.dwPacketNumber)
+        return;
+    bd->XInputPacketNumber = xinput_state.dwPacketNumber;
 
     #define IM_SATURATE(V)                      (V < 0.0f ? 0.0f : V > 1.0f ? 1.0f : V)
     #define MAP_BUTTON(KEY_NO, BUTTON_ENUM)     { io.AddKeyEvent(KEY_NO, (gamepad.wButtons & BUTTON_ENUM) != 0); }
@@ -407,7 +413,7 @@ void    ImGui_ImplWin32_NewFrame()
     // Setup time step
     INT64 current_time = 0;
     ::QueryPerformanceCounter((LARGE_INTEGER*)&current_time);
-    io.DeltaTime = (float)(current_time - bd->Time) / bd->TicksPerSecond;
+    io.DeltaTime = (float)((double)(current_time - bd->Time) / (double)bd->TicksPerSecond);
     bd->Time = current_time;
 
     // Update OS mouse position
@@ -771,6 +777,9 @@ IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandlerEx(HWND hwnd, UINT msg, WPA
     case WM_SETFOCUS:
     case WM_KILLFOCUS:
         io.AddFocusEvent(msg == WM_SETFOCUS);
+#ifndef IMGUI_IMPL_WIN32_DISABLE_GAMEPAD
+        bd->XInputPacketNumber = 0; // FIXME: Technically, calling io.ClearInputKeys() directly would require this as well.
+#endif
         return 0;
     case WM_INPUTLANGCHANGE:
         ImGui_ImplWin32_UpdateKeyboardCodePage(io);
@@ -830,7 +839,7 @@ IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandlerEx(HWND hwnd, UINT msg, WPA
 // - Your own app may already do this via a manifest or explicit calls. This is mostly useful for our examples/ apps.
 // - In theory we could call simple functions from Windows SDK such as SetProcessDPIAware(), SetProcessDpiAwareness(), etc.
 //   but most of the functions provided by Microsoft require Windows 8.1/10+ SDK at compile time and Windows 8/10+ at runtime,
-//   neither we want to require the user to have. So we dynamically select and load those functions to avoid dependencies.
+//   neither of which we want to require the user to have. So we dynamically select and load those functions to avoid dependencies.
 //---------------------------------------------------------------------------------------------------------
 // This is the scheme successfully used by GLFW (from which we borrowed some of the code) and other apps aiming to be highly portable.
 // ImGui_ImplWin32_EnableDpiAwareness() is just a helper called by main.cpp, we don't call it automatically.
@@ -878,6 +887,7 @@ DECLARE_HANDLE(DPI_AWARENESS_CONTEXT);
 typedef HRESULT(WINAPI* PFN_SetProcessDpiAwareness)(PROCESS_DPI_AWARENESS);                     // Shcore.lib + dll, Windows 8.1+
 typedef HRESULT(WINAPI* PFN_GetDpiForMonitor)(HMONITOR, MONITOR_DPI_TYPE, UINT*, UINT*);        // Shcore.lib + dll, Windows 8.1+
 typedef DPI_AWARENESS_CONTEXT(WINAPI* PFN_SetThreadDpiAwarenessContext)(DPI_AWARENESS_CONTEXT); // User32.lib + dll, Windows 10 v1607+ (Creators Update)
+typedef BOOL(WINAPI* PFN_SetProcessDpiAwarenessContext)(DPI_AWARENESS_CONTEXT);                 // User32.lib + dll, Windows 10 v1703+ (Creators Update)
 
 // Helper function to enable DPI awareness without setting up a manifest
 void ImGui_ImplWin32_EnableDpiAwareness()
@@ -885,7 +895,12 @@ void ImGui_ImplWin32_EnableDpiAwareness()
     if (_IsWindows10OrGreater())
     {
         static HINSTANCE user32_dll = ::LoadLibraryA("user32.dll"); // Reference counted per-process
-        if (PFN_SetThreadDpiAwarenessContext SetThreadDpiAwarenessContextFn = (PFN_SetThreadDpiAwarenessContext)::GetProcAddress(user32_dll, "SetThreadDpiAwarenessContext"))
+        if (PFN_SetProcessDpiAwarenessContext SetProcessDpiAwarenessContextFn = (PFN_SetProcessDpiAwarenessContext)::GetProcAddress(user32_dll, "SetProcessDpiAwarenessContext")) // Windows 10 v1703+
+        {
+            SetProcessDpiAwarenessContextFn(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+            return;
+        }
+        if (PFN_SetThreadDpiAwarenessContext SetThreadDpiAwarenessContextFn = (PFN_SetThreadDpiAwarenessContext)::GetProcAddress(user32_dll, "SetThreadDpiAwarenessContext")) // Windows 10 v1607+
         {
             SetThreadDpiAwarenessContextFn(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
             return;
@@ -922,7 +937,7 @@ float ImGui_ImplWin32_GetDpiScaleForMonitor(void* monitor)
         {
             GetDpiForMonitorFn((HMONITOR)monitor, MDT_EFFECTIVE_DPI, &xdpi, &ydpi);
             IM_ASSERT(xdpi == ydpi); // Please contact me if you hit this assert!
-            return xdpi / 96.0f;
+            return (float)xdpi / 96.0f;
         }
     }
 #ifndef NOGDI
@@ -932,7 +947,7 @@ float ImGui_ImplWin32_GetDpiScaleForMonitor(void* monitor)
     IM_ASSERT(xdpi == ydpi); // Please contact me if you hit this assert!
     ::ReleaseDC(nullptr, dc);
 #endif
-    return xdpi / 96.0f;
+    return (float)xdpi / 96.0f;
 }
 
 float ImGui_ImplWin32_GetDpiScaleForHwnd(void* hwnd)

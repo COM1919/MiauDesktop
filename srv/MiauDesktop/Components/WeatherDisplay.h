@@ -3,20 +3,16 @@
 #include "../Component.h"
 #include "../GuiBase/GuiBase.h"
 
-#include <winhttp.h>
-#pragma comment(lib, "winhttp.lib")
-
 #include <atomic>
+#include <cstdlib>
 #include <mutex>
 #include <thread>
 
 // =============================================================================
-// WeatherDisplay：实时天气组件
-//   · 数据源：https://wttr.in/?format=j1（完整 JSON，含当前天气 + 3 天预报）
-//             请求失败时回退到 https://wttr.in/?format=j2（精简 JSON）
-//   · 位置：默认由 wttr.in 按公网 IP 自动识别；也可在配置文件里填写 Location
-//           （如 "Beijing" / "上海"）覆盖自动识别结果
-//   · 网络请求在后台线程执行，渲染只读取互斥量保护的数据快照
+// WeatherDisplay：天气组件
+//   数据源：https://wttr.in/?format=j1，请求失败时回退到 https://wttr.in/?format=j2（精简版本的JSON）
+//   位置：默认由 wttr.in 按公网 IP 自动识别；也可在配置文件里填写 Location 覆盖自动识别结果
+//   网络请求在后台线程执行，渲染只读取互斥量保护的数据快照
 // =============================================================================
 class WeatherDisplay : public Component
 {
@@ -95,7 +91,7 @@ protected:
         items.push_back(MakeToggle("Fahrenheit", "使用华氏度", "数据", m_fahrenheit,
                                    "关闭时使用摄氏度"));
         items.push_back(MakeSlider("RefreshMinutes", "刷新间隔", "数据",
-                                   static_cast<double>(m_refreshMinutes.load()), 2.0, 60.0, 1.0, 0, " 分钟",
+                                   static_cast<double>(m_refreshMinutes.load()), 20.0, 720.0, 1.0, 0, " 分钟",
                                    "天气数据的自动刷新间隔（过短会被服务端限流）"));
 
         Miau::Settings::SettingItem refresh;
@@ -175,7 +171,7 @@ protected:
         ImGui::PopTextWrapPos();
         ImGui::EndGroup();
 
-        // ---- 详细指标：体感 / 湿度 / 风速 / 能见度（2×2 网格，窄窗口也不拥挤）----
+        // ---- 详细指标：体感 / 湿度 / 风速 / 能见度（2×2 网格）----
         if (m_showDetails)
         {
             DrawDivider(tokens.border);
@@ -229,9 +225,7 @@ protected:
     }
 
 private:
-    // ---------------------------------------------------------------------
     // 数据模型
-    // ---------------------------------------------------------------------
     struct ForecastDay
     {
         std::string date;    // 原始日期（2026-11-20）
@@ -264,9 +258,7 @@ private:
         const char* icon;
     };
 
-    // ---------------------------------------------------------------------
     // 线程与状态
-    // ---------------------------------------------------------------------
     std::thread m_worker;
     std::atomic<bool> m_stop{ false };
     std::atomic<bool> m_refreshRequested{ false };
@@ -286,9 +278,7 @@ private:
         SetWindowSize(ImVec2(400.0f, height));
     }
 
-    // ---------------------------------------------------------------------
     // 后台刷新
-    // ---------------------------------------------------------------------
     void WorkerLoop()
     {
         ULONGLONG nextAttempt = 0;
@@ -298,7 +288,7 @@ private:
             if (m_refreshRequested.exchange(false) || now >= nextAttempt)
             {
                 const bool ok = FetchOnce();
-                // 成功：按配置的分钟数刷新；失败：1 分钟后重试
+                // 成功：按配置的分钟数刷新、失败：1 分钟后重试
                 const ULONGLONG delayMinutes = static_cast<ULONGLONG>(m_refreshMinutes.load());
                 const ULONGLONG delay = ok ? delayMinutes * 60ULL * 1000ULL : 60ULL * 1000ULL;
                 nextAttempt = GetTickCount64() + delay;
@@ -321,7 +311,7 @@ private:
         WeatherData parsed;
         std::string error;
 
-        // 主接口 j1（完整 JSON）；失败时回退 j2（精简 JSON）
+        // 主接口 j1（完整 JSON）；失败时回退 j2（j2是精简JSON）
         bool ok = false;
         std::string body;
         if (HttpGet(BuildPath(location, true), body, error))
@@ -369,6 +359,7 @@ private:
         return wide;
     }
 
+	// 百分号编码（URL Encode）,实际上可以说是数字的URL编码
     static std::string PercentEncode(const std::string& text)
     {
         static const char* hex = "0123456789ABCDEF";
@@ -395,9 +386,7 @@ private:
     {
         body.clear();
 
-        // UA 使用 curl，wttr.in 会据此返回纯数据而不是 HTML 页面
-        HINTERNET session = WinHttpOpen(L"curl/8.5.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
-                                        WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+        HINTERNET session = WinHttpOpen(L"curl/8.5.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
         if (!session)
         {
             error = "无法初始化 WinHTTP";
@@ -408,40 +397,25 @@ private:
         bool ok = false;
         HINTERNET connect = WinHttpConnect(session, L"wttr.in", INTERNET_DEFAULT_HTTPS_PORT, 0);
         if (!connect)
-        {
             error = "无法连接 wttr.in（网络不可用或被拦截）";
-        }
         else
         {
-            HINTERNET request = WinHttpOpenRequest(connect, L"GET", path.c_str(), nullptr,
-                                                   WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
-                                                   WINHTTP_FLAG_SECURE);
+            HINTERNET request = WinHttpOpenRequest(connect, L"GET", path.c_str(), nullptr, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE);
             if (!request)
-            {
                 error = "无法创建 HTTP 请求";
-            }
             else
             {
-                if (!WinHttpSendRequest(request, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
-                                        WINHTTP_NO_REQUEST_DATA, 0, 0, 0))
-                {
+                if (!WinHttpSendRequest(request, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0))
                     error = "HTTP 请求发送失败";
-                }
                 else if (!WinHttpReceiveResponse(request, nullptr))
-                {
                     error = "等待服务器响应超时";
-                }
                 else
                 {
                     DWORD statusCode = 0;
                     DWORD size = sizeof(statusCode);
-                    WinHttpQueryHeaders(request, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
-                                        WINHTTP_HEADER_NAME_BY_INDEX, &statusCode, &size,
-                                        WINHTTP_NO_HEADER_INDEX);
+                    WinHttpQueryHeaders(request, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX, &statusCode, &size, WINHTTP_NO_HEADER_INDEX);
                     if (statusCode != 200)
-                    {
                         error = "服务器返回状态 " + std::to_string(statusCode);
-                    }
                     else
                     {
                         ok = true;
@@ -472,16 +446,61 @@ private:
         return ok;
     }
 
-    // ---------------------------------------------------------------------
-    // JSON 解析（j1 / j2 共用同一套容错解析）
-    // ---------------------------------------------------------------------
+    // 取字符串：兼容 "文本" 与 [{"value": "文本"}] 两种形式
+    static std::string GetText(const picojson::value& object, const char* key)
+    {
+        if (!object.is<picojson::object>() || !object.contains(key))
+            return {};
+
+        const picojson::value& value = object.get(key);
+        if (value.is<std::string>())
+            return value.get<std::string>();
+        if (value.is<picojson::array>())
+        {
+            const picojson::array& array = value.get<picojson::array>();
+            if (!array.empty())
+                return GetText(array[0], "value");
+        }
+        return {};
+    }
+
+    // 取整数：兼容 12 与 "12" 两种形式；无法解析时返回 0
+    static int GetInt(const picojson::value& object, const char* key)
+    {
+        if (!object.is<picojson::object>() || !object.contains(key))
+            return 0;
+
+        const picojson::value& value = object.get(key);
+        if (value.is<double>())
+            return static_cast<int>(value.get<double>());
+        if (value.is<std::string>())
+        {
+            const std::string& text = value.get<std::string>();
+            char* end = nullptr;
+            const long parsed = std::strtol(text.c_str(), &end, 10);
+            return (end != text.c_str()) ? static_cast<int>(parsed) : 0;
+        }
+        return 0;
+    }
+
+    // 取数组：字段不存在或不是数组时返回 nullptr
+    static const picojson::array* GetArray(const picojson::value& object, const char* key)
+    {
+        if (!object.is<picojson::object>() || !object.contains(key))
+            return nullptr;
+
+        const picojson::value& value = object.get(key);
+        return value.is<picojson::array>() ? &value.get<picojson::array>() : nullptr;
+    }
+
+    // 解析 wttr.in 响应：j1 为完整 JSON，j2 为精简 JSON，字段结构相同
     static bool ParseWeather(const std::string& body, WeatherData& out, std::string& error)
     {
         picojson::value root;
         const std::string parseError = picojson::parse(root, body);
         if (!parseError.empty())
         {
-            error = "JSON 解析失败";
+            error = "JSON 解析失败：" + parseError;
             return false;
         }
         if (!root.is<picojson::object>())
@@ -490,54 +509,49 @@ private:
             return false;
         }
 
-        if (!root.contains("current_condition") || !root.get("current_condition").is<picojson::array>() ||
-            root.get("current_condition").get<picojson::array>().empty())
+        // ---- 当前天气：current_condition[0] ----
+        const picojson::array* conditions = GetArray(root, "current_condition");
+        if (conditions == nullptr || conditions->empty() || !(*conditions)[0].is<picojson::object>())
         {
             error = "响应中没有当前天气数据";
             return false;
         }
 
-        const picojson::value& condition = root.get("current_condition").get<picojson::array>()[0];
-        if (!condition.is<picojson::object>())
-        {
-            error = "当前天气数据格式不正确";
-            return false;
-        }
-
+        const picojson::value& current = (*conditions)[0];
         out = WeatherData{};
-        out.tempC = JsonInt(condition, "temp_C");
-        out.feelsC = JsonInt(condition, "FeelsLikeC");
-        out.humidity = JsonInt(condition, "humidity");
-        out.windKmph = JsonInt(condition, "windspeedKmph");
-        out.visibility = JsonInt(condition, "visibility");
-        out.pressure = JsonInt(condition, "pressure");
-        out.windDir = JsonString(condition, "winddir16Point");
-        out.code = JsonString(condition, "weatherCode");
-        out.desc = JsonNestedValue(condition, "weatherDesc");
+        out.tempC = GetInt(current, "temp_C");
+        out.feelsC = GetInt(current, "FeelsLikeC");
+        out.humidity = GetInt(current, "humidity");
+        out.windKmph = GetInt(current, "windspeedKmph");
+        out.visibility = GetInt(current, "visibility");
+        out.pressure = GetInt(current, "pressure");
+        out.windDir = GetText(current, "winddir16Point");
+        out.code = GetText(current, "weatherCode");
+        out.desc = GetText(current, "weatherDesc");
 
-        // 位置：nearest_area[0].areaName[0].value / region[0].value / country[0].value
-        std::string area, region, country;
-        if (root.contains("nearest_area") && root.get("nearest_area").is<picojson::array>() &&
-            !root.get("nearest_area").get<picojson::array>().empty())
+        // ---- 位置：nearest_area[0].areaName / region / country ----
+        std::string area;
+        std::string region;
+        std::string country;
+        if (const picojson::array* areas = GetArray(root, "nearest_area"); areas != nullptr && !areas->empty())
         {
-            const picojson::value& nearest = root.get("nearest_area").get<picojson::array>()[0];
-            area = JsonNestedValue(nearest, "areaName");
-            region = JsonNestedValue(nearest, "region");
-            country = JsonNestedValue(nearest, "country");
+            const picojson::value& nearest = (*areas)[0];
+            area = GetText(nearest, "areaName");
+            region = GetText(nearest, "region");
+            country = GetText(nearest, "country");
         }
+
         std::string location = area;
         if (!region.empty() && region != area)
             location += " · " + region;
         else if (!country.empty())
             location += " · " + country;
-        if (location.empty())
-            location = "自动定位";
-        out.locationText = location;
+        out.locationText = location.empty() ? "自动定位" : location;
 
-        // 三天预报
-        if (root.contains("weather") && root.get("weather").is<picojson::array>())
+        // ---- 未来三天：weather[].hourly[4] 为当天正午 ----
+        if (const picojson::array* days = GetArray(root, "weather"))
         {
-            for (const picojson::value& dayJson : root.get("weather").get<picojson::array>())
+            for (const picojson::value& dayJson : *days)
             {
                 if (out.forecast.size() >= 3)
                     break;
@@ -545,20 +559,15 @@ private:
                     continue;
 
                 ForecastDay day;
-                day.date = JsonString(dayJson, "date");
+                day.date = GetText(dayJson, "date");
                 day.label = FormatDayLabel(day.date);
-                day.maxC = JsonInt(dayJson, "maxtempC");
-                day.minC = JsonInt(dayJson, "mintempC");
+                day.maxC = GetInt(dayJson, "maxtempC");
+                day.minC = GetInt(dayJson, "mintempC");
 
-                // 取当天正午时段的天气代码（没有 hourly 时退回整体代码）
-                if (dayJson.contains("hourly") && dayJson.get("hourly").is<picojson::array>())
+                if (const picojson::array* hours = GetArray(dayJson, "hourly"); hours != nullptr && !hours->empty())
                 {
-                    const picojson::array& hours = dayJson.get("hourly").get<picojson::array>();
-                    if (!hours.empty())
-                    {
-                        const picojson::value& noon = hours.size() > 4 ? hours[4] : hours[0];
-                        day.code = JsonString(noon, "weatherCode");
-                    }
+                    const picojson::value& noon = hours->size() > 4 ? (*hours)[4] : (*hours)[0];
+                    day.code = GetText(noon, "weatherCode");
                 }
                 if (day.code.empty())
                     day.code = out.code;
@@ -571,59 +580,10 @@ private:
         return true;
     }
 
+    // "2026-11-20" -> "11-20"，去除年份
     static std::string FormatDayLabel(const std::string& date)
     {
-        // "2026-11-20" -> "11-20"
-        if (date.size() >= 10)
-            return date.substr(5, 5);
-        return date;
-    }
-
-    static const picojson::value* JsonFind(const picojson::value& obj, const char* key)
-    {
-        if (!obj.is<picojson::object>() || !obj.contains(key))
-            return nullptr;
-        return &obj.get(key);
-    }
-
-    static std::string JsonString(const picojson::value& obj, const char* key)
-    {
-        const picojson::value* value = JsonFind(obj, key);
-        if (value == nullptr)
-            return {};
-        if (value->is<std::string>())
-            return value->get<std::string>();
-        return {};
-    }
-
-    static int JsonInt(const picojson::value& obj, const char* key)
-    {
-        const picojson::value* value = JsonFind(obj, key);
-        if (value == nullptr)
-            return 0;
-        if (value->is<double>())
-            return static_cast<int>(value->get<double>());
-        if (value->is<std::string>())
-            return atoi(value->get<std::string>().c_str());
-        return 0;
-    }
-
-    // wttr.in 的很多字段是 [{"value": "..."}] 形式的嵌套数组
-    static std::string JsonNestedValue(const picojson::value& obj, const char* key)
-    {
-        const picojson::value* value = JsonFind(obj, key);
-        if (value == nullptr)
-            return {};
-        if (value->is<std::string>())
-            return value->get<std::string>();
-        if (value->is<picojson::array>())
-        {
-            const picojson::array& array = value->get<picojson::array>();
-            if (array.empty())
-                return {};
-            return JsonString(array[0], "value");
-        }
-        return {};
+        return date.size() >= 10 ? date.substr(5, 5) : date;
     }
 
     // ---------------------------------------------------------------------

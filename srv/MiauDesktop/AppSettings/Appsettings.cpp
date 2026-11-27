@@ -536,7 +536,7 @@ void AppSettings::PostDraw()
         ImGuiWindow* win = ImGui::FindWindowByName(comp->GetName().c_str());
         if (!win)
             continue;
-        bgDrawList->AddRect(win->Pos, ImVec2(win->Pos.x + win->Size.x, win->Pos.y + win->Size.y), IM_COL32(100, 200, 255, 80), 0, 0, 1.5f);
+        bgDrawList->AddRect(win->Pos, ImVec2(win->Pos.x + win->Size.x, win->Pos.y + win->Size.y), IM_COL32(100, 200, 255, 80), 0, 1.5f, 0);
 
         // 边缘调整高亮：hover 或调整中时高亮对应边缘（Windows 风格反馈）
         int hlDir = EditMode::ResizeDir_None;

@@ -46,7 +46,31 @@ void GuiBase::DrawGlowBorder(ImVec2 min, ImVec2 max, ImU32 color, float thicknes
             ImVec2(min.x - offset, min.y - offset),
             ImVec2(max.x + offset, max.y + offset),
             GlowColor, style.ChildRounding,
-            0.0f, 0.1f);
+            0.1f, 0);
+    }
+}
+
+namespace
+{
+    // 共用的圆弧绘制：沿圆环采样后一次提交 polyline
+    // ProgressBarArc 与 GuiGauge 都走这里，避免各自重复写采样循环
+    void DrawGuiArcPolyline(ImDrawList* drawList, ImVec2 center, float radius,
+                            float startAngle, float sweepAngle, int segments,
+                            ImU32 color, float thickness)
+    {
+        if (drawList == nullptr || segments <= 0)
+        {
+            return;
+        }
+        std::vector<ImVec2> points;
+        points.reserve(static_cast<std::size_t>(segments) + 1);
+        for (int index = 0; index <= segments; ++index)
+        {
+            const float angle = startAngle + sweepAngle * static_cast<float>(index) / static_cast<float>(segments);
+            points.emplace_back(center.x + cosf(angle) * radius,
+                                center.y + sinf(angle) * radius);
+        }
+        drawList->AddPolyline(points.data(), static_cast<int>(points.size()), color, thickness, ImDrawFlags_None);
     }
 }
 
@@ -102,17 +126,9 @@ void GuiBase::ProgressBarArc(const char* label, float progress, ImVec2 size, ImV
         const float angle_max_rad = angle_max * (IM_PI / 180.0f);
         const float angle_range = angle_max_rad - angle_min_rad;
 
-        int count = ImMax(2, (int)(segments * progress_val));
-        std::vector<ImVec2> points;
-        points.reserve(count + 1);
-        for (int i = 0; i <= count; ++i)
-        {
-            float t = (i / (float)count) * progress_val;
-            float a = angle_min_rad + t * angle_range;
-            points.emplace_back(center.x + cosf(a) * radius,
-                                center.y + sinf(a) * radius);
-        }
-        draw_list->AddPolyline(points.data(), (int)points.size(), color, 0, thick);
+        const int count = ImMax(2, (int)(segments * progress_val));
+        DrawGuiArcPolyline(draw_list, center, radius, angle_min_rad,
+                           angle_range * progress_val, count, color, thick);
     };
 
     // 背景半圆弧
@@ -161,6 +177,49 @@ void GuiBase::ProgressBarArc(const char* label, float progress, ImVec2 size, ImV
 
     ImGui::EndChild();
     ImGui::PopID();
+}
+
+void GuiBase::GuiGauge(const char* label, float progress, const ImVec2& size,
+                       GuiColor fillColor, const GuiGaugeOptions& options)
+{
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    const ImVec2 cursor = ImGui::GetCursorScreenPos();
+    const float value = std::clamp(progress, 0.0f, 1.0f);
+
+    const float centerX = cursor.x + size.x * 0.5f;
+    const float centerY = cursor.y + options.centerYOffset;
+    const float outerRadius = options.outerRadius;
+    const float thickness = options.thickness;
+
+    // 轨道圆环：使用 StrokeCenter，让轨道与进度弧覆盖同一半径范围
+    drawList->AddCircle(ImVec2(centerX, centerY), outerRadius,
+                        options.trackColor.ToImU32(), 64, thickness, ImDrawFlags_StrokeCenter);
+
+    // 进度弧（顶部起始，顺时针）
+    if (value > 0.001f)
+    {
+        const float startAngle = -IM_PI * 0.5f;
+        const float sweep = value * IM_PI * 2.0f;
+        const int segments = std::max(16, static_cast<int>(value * 64.0f));
+        DrawGuiArcPolyline(drawList, ImVec2(centerX, centerY), outerRadius,
+                           startAngle, sweep, segments, fillColor.ToImU32(), thickness);
+    }
+
+    // 中心百分比
+    char percentText[16];
+    std::snprintf(percentText, sizeof(percentText), "%d%%", static_cast<int>(value * 100.0f));
+    const ImVec2 percentSize = ImGui::CalcTextSize(percentText);
+    drawList->AddText(ImGui::GetFont(), options.percentFontSize,
+                      ImVec2(centerX - percentSize.x * 0.5f, centerY - percentSize.y * 0.5f),
+                      options.textColor.ToImU32(), percentText);
+
+    // 底部标签
+    const ImVec2 labelSize = ImGui::CalcTextSize(label);
+    drawList->AddText(ImGui::GetFont(), options.labelFontSize,
+                      ImVec2(centerX - labelSize.x * 0.5f, centerY + outerRadius + options.labelGap),
+                      options.labelColor.ToImU32(), label);
+
+    ImGui::Dummy(size);
 }
 
 bool GuiBase::CircularButton(const char* label, ImVec2 size)

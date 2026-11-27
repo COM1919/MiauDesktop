@@ -139,6 +139,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <AdditionalIncludeDirectories>.\ImGui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <FavorSizeOrSpeed>Size</FavorSizeOrSpeed>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -203,6 +204,7 @@
     <ClInclude Include="Components\PerformanceMonitor.h" />
     <ClInclude Include="Components\WeatherDisplay.h" />
     <ClInclude Include="Components\TimeDisplay.h" />
+    <ClInclude Include="Components\TodoList.h" />
     <ClInclude Include="Components\ProcessManager.h" />
     <ClInclude Include="Config\Config.h" />
     <ClInclude Include="Framework.h" />

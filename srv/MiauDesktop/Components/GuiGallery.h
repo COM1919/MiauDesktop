@@ -246,8 +246,7 @@ protected:
                 { "午后", "Noon", nullptr },
                 { "黄昏", "Dusk", nullptr },
             };
-            GuiBase::GuiCarouselEx("##variant_carousel", carouselItems, 3, &m_carouselIndex,
-                                   fullWidth, 200.0f);
+            GuiBase::GuiCarouselEx("##variant_carousel", carouselItems, 3, &m_carouselIndex, fullWidth, 200.0f);
         }
 
         // 文本层级

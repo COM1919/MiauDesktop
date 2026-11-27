@@ -3264,7 +3264,7 @@ static void ShowClipSystemDemo()
 				cards_draw_list->AddRect(
 					ImVec2(x + offset_x, y + offset_y),
 					ImVec2(x + offset_x + scaled_w, y + offset_y + scaled_h),
-					IM_COL32(180, 180, 175, a), 6.0f, 0, 1.5f);
+					IM_COL32(180, 180, 175, a), 6.0f, 1.5f, 0);
 
 				// Suit text
 				ImU32 text_col = (card_colors[i] & 0x00FFFFFF) | ((a & 0xFF) << 24);
@@ -7371,7 +7371,7 @@ static void ShowStressTestDemo()
 						int g = (int)(ImClamp(val.y, 0.0f, 1.0f) * 255);
 						int b = (int)(ImClamp(val.z, 0.0f, 1.0f) * 255);
 						dl->AddRectFilled(ImVec2(cell_left, cell_top), ImVec2(cell_right, cell_bottom), IM_COL32(r, g, b, 255));
-						dl->AddRect(ImVec2(cell_left, cell_top), ImVec2(cell_right, cell_bottom), IM_COL32(255, 255, 255, 100), 0.0f, 0, 1.0f);
+						dl->AddRect(ImVec2(cell_left, cell_top), ImVec2(cell_right, cell_bottom), IM_COL32(255, 255, 255, 100), 0.0f, 1.0f, 0);
 						break;
 					}
 					case 4: // Mixed - different visualization per cell type

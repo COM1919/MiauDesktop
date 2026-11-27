@@ -94,7 +94,7 @@ namespace GuiBase
         {
             GuiColor border = style.borderColor;
             border.a = style.borderAlpha * style.opacity;
-            drawList->AddRect(pos, pos + size, border.ToImU32(), style.radius, ImDrawFlags_RoundCornersAll, style.borderWidth);
+            drawList->AddRect(pos, pos + size, border.ToImU32(), style.radius, style.borderWidth, ImDrawFlags_RoundCornersAll);
         }
     }
 

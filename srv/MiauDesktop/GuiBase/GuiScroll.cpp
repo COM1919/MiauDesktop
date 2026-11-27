@@ -924,7 +924,7 @@ namespace GuiBase
         drawList->AddRect(cellMin, cellMax,
                           WithAlpha(selected ? tokens.primary : tokens.border,
                                     selected ? 0.85f : 0.55f).ToImU32(),
-                          rounding, ImDrawFlags_RoundCornersAll, 1.0f);
+                          rounding, 1.0f, ImDrawFlags_RoundCornersAll);
 
         char textBuffer[32];
         snprintf(textBuffer, sizeof(textBuffer), "#%d", index);

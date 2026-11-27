@@ -38,4 +38,8 @@ IM_MSVC_RUNTIME_CHECKS_OFF
 static inline ImOffsetRect operator+(const ImOffsetRect& lhs, const ImOffsetRect& rhs) { return ImOffsetRect(lhs.Top + rhs.Top, lhs.Left + rhs.Left, lhs.Bottom + rhs.Bottom, lhs.Right + rhs.Right); }
 static inline ImOffsetRect operator-(const ImOffsetRect& lhs, const ImOffsetRect& rhs) { return ImOffsetRect(lhs.Top - rhs.Top, lhs.Left - rhs.Left, lhs.Bottom - rhs.Bottom, lhs.Right - rhs.Right); }
 static inline ImOffsetRect operator*(const ImOffsetRect& lhs, const ImOffsetRect& rhs) { return ImOffsetRect(lhs.Top * rhs.Top, lhs.Left * rhs.Left, lhs.Bottom * rhs.Bottom, lhs.Right * rhs.Right); }
+
+// Helper: needed since Dear ImGui 1.93 changed its generic ImLerp() template to require a float cast,
+// which ImOffsetRect doesn't support. Keep an explicit overload so ImGuiToggle keeps compiling.
+static inline ImOffsetRect ImLerp(const ImOffsetRect& a, const ImOffsetRect& b, float t) { return a + (b - a) * t; }
 IM_MSVC_RUNTIME_CHECKS_RESTORE

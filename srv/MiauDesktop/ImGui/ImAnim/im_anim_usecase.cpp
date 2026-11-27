@@ -121,7 +121,7 @@ static void ShowUsecase_AnimatedButton()
 		dl->AddRectFilled(btn_pos, ImVec2(btn_pos.x + btn_size.x, btn_pos.y + btn_size.y),
 			fill_color, 8.0f);
 		dl->AddRect(btn_pos, ImVec2(btn_pos.x + btn_size.x, btn_pos.y + btn_size.y),
-			border_color, 8.0f, 0, border);
+			border_color, 8.0f, border, 0);
 
 		const char* label = "Ghost";
 		ImVec2 text_size = ImGui::CalcTextSize(label);
@@ -557,7 +557,7 @@ static void ShowUsecase_CardHover()
 		dl->AddRectFilled(drawn_pos, ImVec2(drawn_pos.x + card_size.x, drawn_pos.y + card_size.y),
 			IM_COL32(45, 48, 58, 255), 8.0f);
 		dl->AddRect(drawn_pos, ImVec2(drawn_pos.x + card_size.x, drawn_pos.y + card_size.y),
-			ImGui::ColorConvertFloat4ToU32(border_color), 8.0f, 0, 1.5f);
+			ImGui::ColorConvertFloat4ToU32(border_color), 8.0f, 1.5f, 0);
 
 		// Draw title
 		ImVec2 title_pos(drawn_pos.x + 16.0f, drawn_pos.y + 20.0f);
@@ -2323,7 +2323,7 @@ static void ShowUsecase_FlipCard()
 			dl->AddRect(
 				ImVec2(card_min.x + pattern_offset, card_min.y + 20),
 				ImVec2(card_max.x - pattern_offset, card_max.y - 20),
-				IM_COL32(255, 255, 255, 100), 4.0f, 0, 2.0f);
+				IM_COL32(255, 255, 255, 100), 4.0f, 2.0f, 0);
 
 			// Back text
 			const char* back_text = "SECRET!";
@@ -2669,7 +2669,7 @@ static void ShowUsecase_SearchExpand()
 	dl->AddRectFilled(bar_pos, ImVec2(bar_pos.x + width, bar_pos.y + bar_height),
 		IM_COL32(45, 48, 60, 255), bar_height * 0.5f);
 	dl->AddRect(bar_pos, ImVec2(bar_pos.x + width, bar_pos.y + bar_height),
-		expanded ? IM_COL32(91, 194, 231, 255) : IM_COL32(70, 75, 90, 255), bar_height * 0.5f, 0, 1.5f);
+		expanded ? IM_COL32(91, 194, 231, 255) : IM_COL32(70, 75, 90, 255), bar_height * 0.5f, 1.5f, 0);
 
 	// Search icon
 	ImVec2 icon_center(bar_pos.x + 20, bar_pos.y + bar_height * 0.5f);
@@ -6176,14 +6176,14 @@ static void ShowUsecase_GlowingBorder()
 			ImVec2(pos.x - layer_size, pos.y - layer_size),
 			ImVec2(pos.x + box_size.x + layer_size, pos.y + box_size.y + layer_size),
 			IM_COL32(100, 180, 255, (int)(layer_alpha * 255)),
-			12 * scale + i * 2 * scale, 0, 2.0f + i);
+			12 * scale + i * 2 * scale, 2.0f + i, 0);
 	}
 
 	// Main box
 	dl->AddRectFilled(pos, ImVec2(pos.x + box_size.x, pos.y + box_size.y),
 		IM_COL32(40, 45, 55, 255), 8 * scale);
 	dl->AddRect(pos, ImVec2(pos.x + box_size.x, pos.y + box_size.y),
-		IM_COL32(100, 180, 255, 255), 8 * scale, 0, 2.0f);
+		IM_COL32(100, 180, 255, 255), 8 * scale, 2.0f, 0);
 
 	// Content
 	const char* text = "Featured Item";
@@ -6299,7 +6299,7 @@ static void ShowUsecase_AnimatedGraphNode()
 		dl->AddRect(
 			ImVec2(node_pos.x - offset.x, node_pos.y - offset.y),
 			ImVec2(node_pos.x - offset.x + scaled_size.x, node_pos.y - offset.y + scaled_size.y),
-			nodes[i].color, 6 * scale, 0, 2.0f);
+			nodes[i].color, 6 * scale, 2.0f, 0);
 
 		// Label
 		ImVec2 text_size = ImGui::CalcTextSize(nodes[i].label);
@@ -8516,7 +8516,7 @@ static void ShowUsecase_SearchInput()
 		dl->AddRectFilled(picker_pos, ImVec2(picker_pos.x + picker_width, picker_pos.y + picker_height),
 			IM_COL32(40, 45, 55, (int)(240 * picker_anim)), 20 * scale * picker_anim);
 		dl->AddRect(picker_pos, ImVec2(picker_pos.x + picker_width, picker_pos.y + picker_height),
-			IM_COL32(80, 85, 95, (int)(200 * picker_anim)), 20 * scale * picker_anim, 0, 1.5f * scale);
+			IM_COL32(80, 85, 95, (int)(200 * picker_anim)), 20 * scale * picker_anim, 1.5f * scale, 0);
 
 		// Draw reaction options
 		for (int i = 0; i < 5; i++)
@@ -8753,7 +8753,7 @@ static void ShowUsecase_ProductCard()
 		float pulse = iam_oscillate(ImGui::GetID("pulse"), 1.0f, 1.0f, 0, 0.0f, dt);
 		pulse = pulse * 0.5f + 0.5f;  // Convert -1..1 to 0..1
 		dl->AddRect(art_pos, ImVec2(art_pos.x + art_size, art_pos.y + art_size),
-			IM_COL32(150, 120, 200, (int)(50 + 50 * pulse)), 24 * scale, 0, 6 * scale);
+			IM_COL32(150, 120, 200, (int)(50 + 50 * pulse)), 24 * scale, 6 * scale, 0);
 	}
 
 	// Song info

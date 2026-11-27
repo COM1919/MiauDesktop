@@ -683,6 +683,26 @@ namespace GuiBase
     void ProgressBarArc(const char* label, float progress, ImVec2 size,
                         ImVec4 Color, ImVec4 bgColor, float thickness = 5.0f);
 
+    // 环形仪表盘参数（整圆，顶部起始顺时针）
+    // 动画由调用方的 GuiAnimatedProgress 提供，本控件不做二次平滑
+    struct GuiGaugeOptions
+    {
+        float thickness = 8.0f;
+        float outerRadius = 48.0f;
+        float centerYOffset = 58.0f;     // 圆心相对控件顶部的偏移
+        float percentFontSize = 22.0f;
+        float labelFontSize = 14.0f;
+        float labelGap = 12.0f;          // 标签与圆环底部的间距
+        GuiColor trackColor = GuiColor(0.20f, 0.20f, 0.24f, 1.0f);
+        GuiColor textColor = GuiColor(1.0f, 1.0f, 1.0f, 1.0f);
+        GuiColor labelColor = GuiColor(0.55f, 0.55f, 0.60f, 1.0f);
+    };
+
+    // 环形仪表盘：整圆轨道 + 顶部顺时针进度弧 + 中心百分比 + 底部标签
+    // 以 Dummy 推进布局，可连续排列多个仪表盘（配合 SameLine）
+    void GuiGauge(const char* label, float progress, const ImVec2& size,
+                  GuiColor fillColor, const GuiGaugeOptions& options = GuiGaugeOptions());
+
     // 圆形按钮（圆角大按钮）
     bool CircularButton(const char* label, ImVec2 size);
 
@@ -795,6 +815,66 @@ namespace GuiBase
                         const std::vector<std::vector<std::string>>& rows,
                         const ImVec2& size = ImVec2(0.0f, 0.0f),
                         const GuiDatatableOptions& options = GuiDatatableOptions());
+
+    // =========================================================================
+    // 可定制数据表格（GuiNavigation.cpp）
+    // GuiDatatableEx 面向纯字符串单元格；本组封装保留 ImGui 表格的排序 / 列宽 /
+    // 虚拟滚动 / 列显示开关能力，同时允许调用方逐格自定义绘制
+    // （图标、迷你进度条、着色文字等）
+    // =========================================================================
+
+    struct GuiTableColumn
+    {
+        const char* header = nullptr;      // 表头文字（"##id" 形式可隐藏显示）
+        float width = 0.0f;                // >0 固定宽度；<=0 弹性拉伸
+        ImGuiTableColumnFlags flags = 0;   // 追加列 flags（如 DefaultSort / NoResize）
+        bool visible = true;               // false 时本帧不创建该列（列显示开关）
+    };
+
+    struct GuiTableOptions
+    {
+        ImVec2 size = ImVec2(0.0f, 0.0f);  // size.x/y <= 0 时取可用宽/高
+        bool sortable = false;             // 点击表头排序（配合 GuiTableConsumeSort）
+        bool resizable = true;             // 拖动列边界
+        bool rowBackground = true;         // 交替行背景
+        bool bordersInnerV = false;        // 列间竖线
+        bool scrollY = true;               // 垂直滚动
+        bool padOuterX = true;             // 表格左右内边距
+    };
+
+    // 开始表格；返回 false 时无需调用 EndGuiTable
+    bool BeginGuiTable(const char* label, const GuiTableColumn* columns, int columnCount,
+                       const GuiTableOptions& options = GuiTableOptions());
+    void EndGuiTable();
+
+    // 表头行（在 BeginGuiTable 之后、数据行之前调用）
+    void GuiTableHeadersRow();
+
+    // 读取用户点击表头产生的排序请求；返回 true 表示本帧排序发生变化。
+    // column 为可见列序号（0 起，按 BeginGuiTable 中 visible 列的顺序）
+    bool GuiTableConsumeSort(int* column, bool* ascending);
+
+    // 行与单元格
+    void GuiTableNextRow();
+    void GuiTableCell(int column, bool alignTextToFramePadding = true);
+
+    // 单元格内的迷你进度条（自动垂直居中，并把光标右移以便同行显示文字）
+    void GuiTableCellProgress(float value, float width, const GuiColor& fill,
+                              const GuiColor& track = GuiColor(0.25f, 0.25f, 0.28f, 1.0f));
+
+    // 虚拟化行遍历：仅对可见行调用 rowCallback（内部使用 ImGuiListClipper），
+    // 回调内应调用 GuiTableNextRow / GuiTableCell 提交单元格
+    void GuiTableRows(int rowCount, const std::function<void(int)>& rowCallback);
+
+    // 表头右键列显示菜单：紧跟在 GuiTableHeadersRow 之后调用；
+    // items 为「显示名 + 绑定到调用方的开关」，勾选后下一帧列集合随之变化
+    struct GuiTableColumnToggle
+    {
+        const char* label = nullptr;
+        bool* value = nullptr;
+    };
+    void GuiTableHeaderColumnMenu(const char* label,
+                                  const GuiTableColumnToggle* items, int itemCount);
 
     // =========================================================================
     // 输入与选择（GuiInput.cpp）
@@ -1215,6 +1295,7 @@ namespace GuiBase
         float cardWidthRatio = 0.62f; // 卡片宽 / 视口宽（clamp 到 0.32~1.0）
         float overlap = 0.26f;        // 相邻卡片重叠比例（clamp 到 0~0.6）
         float parallax = 0.35f;       // 左右卡片的缩小比例（0 表示不缩）
+        float duration = 0.24f;       // 切页动画时长（秒），越小收敛越快
     };
     bool GuiCarouselEx(const char* label, const GuiCarouselItem* items, int itemCount,
                        int* selectedIndex, float width, float height,

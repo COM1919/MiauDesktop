@@ -4,6 +4,10 @@
 #include "../GuiBase/GuiBase.h"
 #include "../AppSettings/AppSettings.h"
 
+// =============================================================================
+// PerformanceMonitor：性能监控
+// 1111阿巴阿巴
+// =============================================================================
 class PerformanceMonitor : public Component
 {
 public:
@@ -85,90 +89,21 @@ protected:
 
         if (m_showCpu)
         {
-            DrawGuiGauge("CPU", m_cpuAnim.Advance(GetCpuUsage() / 100.0f), gaugeSize, GuiBase::GuiColor(0.22f, 0.50f, 0.88f, 1.0f));
+            GuiBase::GuiGauge("CPU", m_cpuAnim.Advance(GetCpuUsage() / 100.0f), gaugeSize, GuiBase::GuiColor(0.22f, 0.50f, 0.88f, 1.0f));
             if (m_showMemory || m_showGpu) ImGui::SameLine();
         }
         if (m_showMemory)
         {
-            DrawGuiGauge("内存", m_memAnim.Advance(GetMemoryUsage() / 100.0f), gaugeSize, GuiBase::GuiColor(0.20f, 0.76f, 0.58f, 1.0f));
+            GuiBase::GuiGauge("内存", m_memAnim.Advance(GetMemoryUsage() / 100.0f), gaugeSize, GuiBase::GuiColor(0.20f, 0.76f, 0.58f, 1.0f));
             if (m_showGpu) ImGui::SameLine();
         }
         if (m_showGpu)
         {
-            DrawGuiGauge("GPU", m_gpuAnim.Advance(GetGpuUsage() / 100.0f), gaugeSize, GuiBase::GuiColor(0.98f, 0.62f, 0.15f, 1.0f));
+            GuiBase::GuiGauge("GPU", m_gpuAnim.Advance(GetGpuUsage() / 100.0f), gaugeSize, GuiBase::GuiColor(0.98f, 0.62f, 0.15f, 1.0f));
         }
     }
 
 private:
-    // EUI 风格圆形仪表盘：外圈轨道 + 进度弧 + 中心百分比 + 底部标签 + 胶囊进度条
-    void DrawGuiGauge(const char* label, float progress, ImVec2 size, GuiBase::GuiColor fillColor)
-    {
-        ImGuiWindow* window = ImGui::GetCurrentWindow();
-        ImDrawList* dl = window->DrawList;
-
-        float value = std::clamp(progress, 0.0f, 1.0f);
-        ImVec2 cursor = ImGui::GetCursorScreenPos();
-
-        // 外圈轨道颜色（EUI surface 暗色）
-        GuiBase::GuiColor trackColor = GuiBase::GuiColor(0.20f, 0.20f, 0.24f, 1.0f);
-        // 文字颜色（EUI text）
-        GuiBase::GuiColor textColor = GuiBase::GuiColor(1.0f, 1.0f, 1.0f, 1.0f);
-        GuiBase::GuiColor subColor = GuiBase::GuiColor(0.55f, 0.55f, 0.60f, 1.0f);
-
-        float centerX = cursor.x + size.x * 0.5f;
-        float centerY = cursor.y + 58.0f;
-        float outerRadius = 48.0f;
-        float thickness = 8.0f;
-
-        // 轨道圆环
-        dl->AddCircle(ImVec2(centerX, centerY), outerRadius, trackColor.ToImU32(), 64, thickness);
-
-        // 进度弧（从顶部顺时针）
-        if (value > 0.001f)
-        {
-            const float startAngle = -IM_PI * 0.5f;  // 顶部
-            const float sweep = value * IM_PI * 2.0f;
-            int segments = std::max(16, (int)(value * 64.0f));
-
-            std::vector<ImVec2> arcPoints;
-            arcPoints.reserve(segments + 1);
-            for (int i = 0; i <= segments; i++)
-            {
-                float a = startAngle + sweep * (float)i / (float)segments;
-                arcPoints.push_back(ImVec2(centerX + cosf(a) * outerRadius,
-                                           centerY + sinf(a) * outerRadius));
-            }
-            dl->AddPolyline(arcPoints.data(), (int)arcPoints.size(), fillColor.ToImU32(), 0, thickness);
-        }
-
-        // 中心百分比文字
-        char pctText[16];
-        snprintf(pctText, sizeof(pctText), "%d%%", (int)(value * 100.0f));
-        float pctFontSize = 22.0f;
-        ImVec2 pctSize = ImGui::CalcTextSize(pctText);
-        dl->AddText(ImGui::GetFont(), pctFontSize,
-                    ImVec2(centerX - pctSize.x * 0.5f, centerY - pctSize.y * 0.5f),
-                    textColor.ToImU32(), pctText);
-
-        // 底部标签
-        float labelFontSize = 14.0f;
-        ImVec2 labelSize = ImGui::CalcTextSize(label);
-        dl->AddText(ImGui::GetFont(), labelFontSize,
-                    ImVec2(centerX - labelSize.x * 0.5f, centerY + outerRadius + 12.0f),
-                    subColor.ToImU32(), label);
-
-        /*
-        // 底部 EUI 胶囊进度条
-        float barY = cursor.y + size.y - 16.0f;
-        float barH = 6.0f;
-        float barMargin = 12.0f;
-        ImVec2 barPos(cursor.x + barMargin, barY);
-        ImVec2 barSize(size.x - barMargin * 2.0f, barH);
-        GuiBase::DrawGuiProgress(dl, barPos, barSize, value, fillColor, trackColor);
-        */
-        ImGui::Dummy(size);
-    }
-
     float GetCpuUsage() const
     {
         DWORD currentTick = GetTickCount64();

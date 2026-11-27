@@ -389,7 +389,7 @@ namespace GuiBase
             drawList->AddRectFilled(pos, maxPos, tokens.surface.ToImU32(), useRounding);
             drawList->AddRect(pos, maxPos,
                               WithAlpha(tokens.border, 0.72f * useOpacity).ToImU32(),
-                              useRounding, ImDrawFlags_RoundCornersAll, 1.0f);
+                              useRounding, 1.0f, ImDrawFlags_RoundCornersAll);
 
             ImFont* font = ImGui::GetFont();
             if (font != nullptr && useOpacity > 0.0f)

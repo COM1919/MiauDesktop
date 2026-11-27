@@ -61,7 +61,7 @@ namespace GuiBase
 
         DrawGuiSoftShadow(drawList, pos, boxSize, shadow, radius);
         drawList->AddRectFilled(pos, pos + boxSize, background.ToImU32(), radius, ImDrawFlags_RoundCornersAll);
-        drawList->AddRect(pos, pos + boxSize, border.ToImU32(), radius, ImDrawFlags_RoundCornersAll, 1.0f);
+        drawList->AddRect(pos, pos + boxSize, border.ToImU32(), radius, 1.0f, ImDrawFlags_RoundCornersAll);
 
         // 文字垂直居中
         ImVec2 textPos = pos + ImVec2(paddingX, (boxSize.y - textSize.y) * 0.5f);
@@ -128,7 +128,7 @@ namespace GuiBase
                                     tokens.surface.ToImU32(), radius, ImDrawFlags_RoundCornersAll);
             drawList->AddRect(panelPos, panelPos + panelSize,
                               WithAlpha(tokens.border, 0.82f).ToImU32(),
-                              radius, ImDrawFlags_RoundCornersAll, 1.0f);
+                              radius, 1.0f, ImDrawFlags_RoundCornersAll);
 
             ImFont* font = ImGui::GetFont();
 
@@ -275,7 +275,7 @@ namespace GuiBase
             drawList->AddRectFilled(menuPos, menuPos + ImVec2(menuWidth, menuHeight),
                                     background.ToImU32(), radius, ImDrawFlags_RoundCornersAll);
             drawList->AddRect(menuPos, menuPos + ImVec2(menuWidth, menuHeight),
-                              border.ToImU32(), radius, ImDrawFlags_RoundCornersAll, 1.0f);
+                              border.ToImU32(), radius, 1.0f, ImDrawFlags_RoundCornersAll);
 
             // 菜单项：hover 高亮 surfaceHover，按下 surfaceActive，点击选中
             ImFont* font = ImGui::GetFont();
@@ -417,7 +417,7 @@ namespace GuiBase
         // 按下述 z-order 自绘：软阴影 → 背景圆角矩形 → 边框描边 → 文字
         DrawGuiSoftShadow(drawList, pos, boxSize, shadow, radius);
         drawList->AddRectFilled(pos, pos + boxSize, background.ToImU32(), radius, ImDrawFlags_RoundCornersAll);
-        drawList->AddRect(pos, pos + boxSize, border.ToImU32(), radius, ImDrawFlags_RoundCornersAll, 1.0f);
+        drawList->AddRect(pos, pos + boxSize, border.ToImU32(), radius, 1.0f, ImDrawFlags_RoundCornersAll);
 
         // 文字垂直居中，超宽自动换行
         ImVec2 textPos = pos + ImVec2(paddingX, (boxSize.y - textSize.y) * 0.5f);
@@ -532,7 +532,7 @@ namespace GuiBase
         DrawGuiSoftShadow(drawList, pos, boxSize, shadow, radius);
         drawList->AddRectFilled(pos, pos + boxSize, background.ToImU32(), radius, ImDrawFlags_RoundCornersAll);
         drawList->AddRect(pos, pos + boxSize, WithAlpha(tokens.border, 0.82f * alpha).ToImU32(),
-                          radius, ImDrawFlags_RoundCornersAll, 1.0f);
+                          radius, 1.0f, ImDrawFlags_RoundCornersAll);
 
         // 图标
         float contentX = pos.x + paddingX;
@@ -681,7 +681,7 @@ namespace GuiBase
             drawList->AddRectFilled(panelPos, panelPos + panelSize, tokens.surface.ToImU32(),
                                     radius, ImDrawFlags_RoundCornersAll);
             drawList->AddRect(panelPos, panelPos + panelSize, WithAlpha(tokens.border, 0.82f).ToImU32(),
-                              radius, ImDrawFlags_RoundCornersAll, 1.0f);
+                              radius, 1.0f, ImDrawFlags_RoundCornersAll);
 
             ImFont* font = ImGui::GetFont();
             if (font != nullptr && title != nullptr && title[0] != '\0')
@@ -847,7 +847,7 @@ namespace GuiBase
                                     MixColor(tokens.surface, GuiColor(0.0f, 0.0f, 0.0f), 0.12f).ToImU32(),
                                     rounding);
             drawList->AddRect(panelMin, panelMax, WithAlpha(tokens.border, 0.82f).ToImU32(),
-                              rounding, ImDrawFlags_RoundCornersAll, 1.0f);
+                              rounding, 1.0f, ImDrawFlags_RoundCornersAll);
 
             if (ImGui::IsMouseHoveringRect(panelMin, panelMax, false))
             {

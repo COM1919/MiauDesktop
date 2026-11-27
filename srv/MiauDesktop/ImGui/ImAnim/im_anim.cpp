@@ -1209,7 +1209,7 @@ ImVec2 iam_anchor_size(int space) {
 			ImVec2 mi = ImGui::GetItemRectMin(), ma = ImGui::GetItemRectMax();
 			return ImVec2(ma.x - mi.x, ma.y - mi.y);
 		}
-		default: return ImVec2(0,0);
+		default: return ImVec2(0, 0);
 	}
 }
 
@@ -1220,7 +1220,7 @@ ImVec2 iam_tween_vec2_rel(ImGuiID id, ImGuiID channel_id, ImVec2 percent, ImVec2
 }
 
 ImVec2 iam_tween_vec2_resolved(ImGuiID id, ImGuiID channel_id, iam_vec2_resolver fn, void* user, float dur, iam_ease_desc const& ez, int policy, float dt) {
-	ImVec2 target = fn ? fn(user) : ImVec2(0,0);
+	ImVec2 target = fn ? fn(user) : ImVec2(0, 0);
 	return iam_tween_vec2(id, channel_id, target, dur, ez, policy, dt);
 }
 
@@ -1264,7 +1264,7 @@ float iam_tween_float_resolved(ImGuiID id, ImGuiID channel_id, iam_float_resolve
 }
 
 ImVec4 iam_tween_vec4_resolved(ImGuiID id, ImGuiID channel_id, iam_vec4_resolver fn, void* user, float dur, iam_ease_desc const& ez, int policy, float dt) {
-	ImVec4 target = fn ? fn(user) : ImVec4(0,0,0,0);
+	ImVec4 target = fn ? fn(user) : ImVec4(0,0,0, 0);
 	return iam_tween_vec4(id, channel_id, target, dur, ez, policy, dt);
 }
 
@@ -7472,7 +7472,7 @@ void iam_show_debug_timeline(ImGuiID instance_id) {
 			else if (mouse.x >= x1 && mouse.x <= x2 && mouse.y >= seg_y1 && mouse.y <= seg_y2) {
 				// Segment hover tooltip (for easing between keyframes)
 				// Highlight hovered segment
-				dl->AddRect(ImVec2(x1, seg_y1), ImVec2(x2, seg_y2), playhead_color, 2.0f, 0, 2.0f);
+				dl->AddRect(ImVec2(x1, seg_y1), ImVec2(x2, seg_y2), playhead_color, 2.0f, 2.0f, 0);
 
 				ImGui::BeginTooltip();
 				ImGui::Text("Segment: %.2fs - %.2fs", key_time, next_time);

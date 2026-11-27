@@ -175,7 +175,7 @@ namespace GuiBase
 
         ImDrawList* drawList = ImGui::GetWindowDrawList();
         drawList->AddRectFilled(min, max, bg.ToImU32(), rounding);
-        drawList->AddRect(min, max, WithAlpha(tokens.border, 0.70f).ToImU32(), rounding, 0, 1.0f);
+        drawList->AddRect(min, max, WithAlpha(tokens.border, 0.70f).ToImU32(), rounding, 1.0f, 0);
 
         // 文本居中
         std::string displayText = DisplayLabelText(label);
@@ -432,7 +432,7 @@ namespace GuiBase
             boxColor = HoverColor(tokens, boxColor);
         }
         drawList->AddRectFilled(boxPos, boxMax, boxColor.ToImU32(), radius);
-        drawList->AddRect(boxPos, boxMax, WithAlpha(tokens.border, 0.70f).ToImU32(), radius, 0, 1.0f);
+        drawList->AddRect(boxPos, boxMax, WithAlpha(tokens.border, 0.70f).ToImU32(), radius, 1.0f, 0);
 
         // 对勾（选中时绘制）：两条折线，几何移植自 EUI checkbox
         if (*value)
@@ -572,7 +572,7 @@ namespace GuiBase
 
         // 整条背景 + 边框
         drawList->AddRectFilled(min, max, tokens.surface.ToImU32(), radius);
-        drawList->AddRect(min, max, WithAlpha(tokens.border, 0.70f).ToImU32(), radius, 0, 1.0f);
+        drawList->AddRect(min, max, WithAlpha(tokens.border, 0.70f).ToImU32(), radius, 1.0f, 0);
 
         // hover 的未选中段：surfaceHover 高亮
         if (hovered)
@@ -681,14 +681,14 @@ namespace GuiBase
         ImVec2 minusMin = pos;
         ImVec2 minusMax(pos.x + buttonWidth, pos.y + height);
         drawList->AddRectFilled(minusMin, minusMax, minusBg.ToImU32(), radius);
-        drawList->AddRect(minusMin, minusMax, WithAlpha(tokens.border, 0.82f).ToImU32(), radius, 0, 1.0f);
+        drawList->AddRect(minusMin, minusMax, WithAlpha(tokens.border, 0.82f).ToImU32(), radius, 1.0f, 0);
 
         // 中间数值背景：surface 向 background 混合，带边框
         ImVec2 displayMin(pos.x + displayX, pos.y);
         ImVec2 displayMax(displayMin.x + displayWidth, pos.y + height);
         GuiColor fieldColor = MixColor(tokens.surface, tokens.background, 0.12f);
         drawList->AddRectFilled(displayMin, displayMax, fieldColor.ToImU32(), radius);
-        drawList->AddRect(displayMin, displayMax, WithAlpha(tokens.border, 0.82f).ToImU32(), radius, 0, 1.0f);
+        drawList->AddRect(displayMin, displayMax, WithAlpha(tokens.border, 0.82f).ToImU32(), radius, 1.0f, 0);
 
         // 加号按钮背景：与减号对称
         GuiColor plusBg = canIncrease ? tokens.surface : MixColor(tokens.surface, tokens.background, 0.34f);
@@ -703,7 +703,7 @@ namespace GuiBase
         ImVec2 plusMin(pos.x + displayX + displayWidth + gap, pos.y);
         ImVec2 plusMax(plusMin.x + buttonWidth, pos.y + height);
         drawList->AddRectFilled(plusMin, plusMax, plusBg.ToImU32(), radius);
-        drawList->AddRect(plusMin, plusMax, WithAlpha(tokens.border, 0.82f).ToImU32(), radius, 0, 1.0f);
+        drawList->AddRect(plusMin, plusMax, WithAlpha(tokens.border, 0.82f).ToImU32(), radius, 1.0f, 0);
 
         // 减号符号
         GuiColor minusTextColor = canDecrease ? tokens.text : WithAlpha(tokens.text, 0.42f);
@@ -904,7 +904,7 @@ namespace GuiBase
         ImDrawList* drawList = ImGui::GetWindowDrawList();
         drawList->AddRectFilled(min, max, WithAlpha(bg, bg.a * alphaScale).ToImU32(), rounding);
         drawList->AddRect(min, max, WithAlpha(tokens.border, 0.70f * alphaScale).ToImU32(),
-                          rounding, ImDrawFlags_RoundCornersAll, 1.0f);
+                          rounding, 1.0f, ImDrawFlags_RoundCornersAll);
 
         // 图标 + 文字作为整体居中
         const std::string displayText = DisplayLabelText(label);
@@ -1046,7 +1046,7 @@ namespace GuiBase
         const ImVec2 maxPos(pos.x + width, pos.y + height);
         drawList->AddRectFilled(pos, maxPos, tokens.surface.ToImU32(), rounding);
         drawList->AddRect(pos, maxPos, WithAlpha(tokens.border, 0.70f).ToImU32(),
-                          rounding, ImDrawFlags_RoundCornersAll, 1.0f);
+                          rounding, 1.0f, ImDrawFlags_RoundCornersAll);
 
         const ImU32 hoverColor = WithAlpha(tokens.surfaceHover, 0.85f).ToImU32();
         if (minusHovered)

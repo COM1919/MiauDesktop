@@ -156,8 +156,7 @@ namespace GuiBase
             ImVec2(cursor.x + width, cursor.y + height),
             WithAlpha(tokens.border, 0.62f).ToImU32(),
             radius,
-            0,
-            1.0f);
+            1.0f, 0);
 
         // 当前项文字：水平垂直居中
         const char* text = items[newIndex] != nullptr ? items[newIndex] : "";
@@ -268,6 +267,37 @@ namespace GuiBase
             float available = -1.0f;
             float offset = 0.0f;
             int lastFrame = 0;
+        };
+
+        // 表头行命中区域：GuiTableHeadersRow() 记录，GuiTableHeaderColumnMenu() 用来判断
+        // 「鼠标位于表头行任意位置」（IsItemHovered() 只反映最后提交的表头项）
+        struct GuiTableHeaderHit
+        {
+            ImRect rect;
+            int frame = 0;
+        };
+
+        GuiTableHeaderHit& GetGuiTableHeaderHit(ImGuiID id)
+        {
+            static std::unordered_map<ImGuiID, GuiTableHeaderHit> hits;
+            const int frame = ImGui::GetFrameCount();
+            static int lastCleanupFrame = 0;
+            if (frame - lastCleanupFrame > 600)
+            {
+                for (auto it = hits.begin(); it != hits.end();)
+                {
+                    if (frame - it->second.frame > 2)
+                    {
+                        it = hits.erase(it);
+                    }
+                    else
+                    {
+                        ++it;
+                    }
+                }
+                lastCleanupFrame = frame;
+            }
+            return hits[id];
         };
 
         GuiTableRuntime& GetGuiTableRuntime(ImGuiID id)
@@ -736,7 +766,7 @@ namespace GuiBase
 
         // 外框
         drawList->AddRect(pos, ImVec2(pos.x + tableWidth, pos.y + tableHeight),
-                          borderColor.ToImU32(), radius, 0, 1.0f);
+                          borderColor.ToImU32(), radius, 1.0f, 0);
 
         // 推进布局光标到表格底部（GuiVirtualList 的 Dummy 只到数据体底部）
         ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + tableHeight));
@@ -776,113 +806,208 @@ namespace GuiBase
         ImDrawList* drawList = ImGui::GetWindowDrawList();
         ImGui::Dummy(ImVec2(width, height));
 
-        int current = std::clamp(*selectedIndex, 0, itemCount - 1);
-        bool changed = false;
+        const int originalIndex = *selectedIndex;
+        const int target = std::clamp(originalIndex, 0, itemCount - 1);
+        int pendingIndex = target;
 
-        // 从远到近绘制：先 ±1 邻居，最后中心卡片（保证中心在最上层）
-        for (int distance = 1; distance >= 0; --distance)
+        // 位移动画：animIndex 沿环形最短路径平滑靠近 target。
+        // 绘制与命中都基于本帧固定的 animIndex，点击只记录 pendingIndex，
+        // 避免切换途中修改当前索引导致同一张卡片被重复提交（ImGui ID 冲突红框）。
+        const float cycle = static_cast<float>(itemCount);
+        float* animIndex = ImGui::GetStateStorage()->GetFloatRef(
+            ImGui::GetID("##carousel_anim"), static_cast<float>(target));
         {
-            for (int sign = -1; sign <= 1; sign += 2)
+            float delta = static_cast<float>(target) - *animIndex;
+            if (itemCount > 1)
             {
-                if (distance == 0 && sign > 0)
+                delta = std::fmod(delta, cycle);
+                if (delta > cycle * 0.5f)
                 {
-                    continue; // 中心卡片只画一次
+                    delta -= cycle;
                 }
-
-                const int index = current + sign * distance;
-                if (index < 0 || index >= itemCount)
+                else if (delta <= -cycle * 0.5f)
                 {
-                    continue;
+                    delta += cycle;
                 }
+            }
+            const float speed = 1.0f / std::max(0.02f, options.duration);
+            const float dt = std::clamp(ImGui::GetIO().DeltaTime, 0.0f, 0.1f);
+            *animIndex += delta * (1.0f - std::exp(-speed * dt));
 
-                const float scale = (distance == 0) ? 1.0f : neighborScale;
-                const float cardW = cardWidth * scale;
-                const float cardH = cardHeight * scale;
-                const float cardCenterX = centerX + static_cast<float>(sign * distance) * stepX;
-                const ImVec2 cardMin(cardCenterX - cardW * 0.5f, centerY - cardH * 0.5f);
-                const ImVec2 cardMax(cardMin.x + cardW, cardMin.y + cardH);
-                if (cardMax.x <= pos.x || cardMin.x >= maxPos.x)
+            // 收敛后吸附到整数目标，避免无限逼近
+            float remaining = static_cast<float>(target) - *animIndex;
+            if (itemCount > 1)
+            {
+                remaining = std::fmod(remaining, cycle);
+                if (remaining > cycle * 0.5f)
                 {
-                    continue;
+                    remaining -= cycle;
                 }
-
-                // 命中：邻居卡片也可点击切换
-                ImGui::PushID(index);
-                const ImVec2 savedCursor = ImGui::GetCursorScreenPos();
-                ImGui::SetCursorScreenPos(cardMin);
-                const bool clicked = ImGui::InvisibleButton("##card", ImVec2(cardW, cardH));
-                const bool hovered = ImGui::IsItemHovered();
-                ImGui::SetCursorScreenPos(savedCursor);
-                ImGui::PopID();
-
-                const float rounding = tokens.radius.section;
-                const GuiCarouselItem& item = items[index];
-
-                // 阴影
-                GuiShadowStyle shadow;
-                shadow.blur = (distance == 0) ? 20.0f : 14.0f;
-                shadow.offsetX = 0.0f;
-                shadow.offsetY = (distance == 0) ? 10.0f : 6.0f;
-                shadow.color = GuiColor(0.0f, 0.0f, 0.0f, (distance == 0) ? 0.30f : 0.20f);
-                DrawGuiSoftShadow(drawList, cardMin, ImVec2(cardW, cardH), shadow, rounding);
-
-                // 卡片主体：纹理或表面色占位
-                if (item.texture != nullptr)
+                else if (remaining <= -cycle * 0.5f)
                 {
-                    drawList->AddImageRounded((ImTextureID)item.texture, cardMin, cardMax,
-                                              ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f),
-                                              IM_COL32_WHITE, rounding);
+                    remaining += cycle;
                 }
-                else
-                {
-                    drawList->AddRectFilled(cardMin, cardMax, tokens.surfaceHover.ToImU32(), rounding);
-                }
-                if (hovered && distance > 0)
-                {
-                    drawList->AddRectFilled(cardMin, cardMax, IM_COL32(255, 255, 255, 14), rounding);
-                }
-                drawList->AddRect(cardMin, cardMax,
-                                  WithAlpha(tokens.border, (distance == 0) ? 0.60f : 0.35f).ToImU32(),
-                                  rounding, ImDrawFlags_RoundCornersAll, 1.0f);
+            }
+            if (std::fabs(remaining) < 0.001f)
+            {
+                *animIndex = static_cast<float>(target);
+            }
+        }
 
-                // 底部渐变 + 标题 / 副标题
-                const float overlayHeight = cardH * 0.38f;
-                const ImVec2 overlayMin(cardMin.x, cardMax.y - overlayHeight);
-                drawList->AddRectFilledMultiColor(overlayMin, cardMax,
-                                                  IM_COL32(0, 0, 0, 0), IM_COL32(0, 0, 0, 0),
-                                                  IM_COL32(0, 0, 0, 180), IM_COL32(0, 0, 0, 180));
-
-                ImFont* font = ImGui::GetFont();
-                if (font != nullptr)
+        // 收集可见卡片（中心 ±1.5 槽位），按距离从远到近绘制，中心最后画在最上层
+        struct CarouselSlot
+        {
+            float slot = 0.0f;
+            int index = 0;
+        };
+        CarouselSlot visible[4];
+        int visibleCount = 0;
+        for (int index = 0; index < itemCount; ++index)
+        {
+            float slot = static_cast<float>(index) - *animIndex;
+            if (itemCount > 1)
+            {
+                slot = std::fmod(slot, cycle);
+                if (slot > cycle * 0.5f)
                 {
-                    float textBottom = cardMax.y - 10.0f;
-                    if (item.subtitle != nullptr && item.subtitle[0] != '\0')
-                    {
-                        const float subtitleSize = tokens.typography.label * scale;
-                        const ImVec2 extent = font->CalcTextSizeA(subtitleSize, cardW - 16.0f,
-                                                                  cardW - 16.0f, item.subtitle);
-                        drawList->AddText(font, subtitleSize,
-                                          ImVec2(cardMin.x + (cardW - extent.x) * 0.5f,
-                                                 textBottom - extent.y),
-                                          IM_COL32(255, 255, 255, 200), item.subtitle);
-                        textBottom -= extent.y + 2.0f;
-                    }
-                    if (item.title != nullptr && item.title[0] != '\0')
-                    {
-                        const float titleSize = tokens.typography.subtitle * scale;
-                        const ImVec2 extent = font->CalcTextSizeA(titleSize, cardW - 16.0f,
-                                                                  cardW - 16.0f, item.title);
-                        drawList->AddText(font, titleSize,
-                                          ImVec2(cardMin.x + (cardW - extent.x) * 0.5f,
-                                                 textBottom - extent.y),
-                                          IM_COL32(255, 255, 255, 250), item.title);
-                    }
+                    slot -= cycle;
                 }
-
-                if (clicked && distance > 0)
+                else if (slot <= -cycle * 0.5f)
                 {
-                    current = index;
-                    changed = true;
+                    slot += cycle;
+                }
+            }
+
+            const float distance = std::fabs(slot);
+            if (distance > 1.5f)
+            {
+                continue;
+            }
+
+            // 插入排序：距离大的先绘制
+            int insertAt = visibleCount;
+            while (insertAt > 0 && std::fabs(visible[insertAt - 1].slot) < distance)
+            {
+                visible[insertAt] = visible[insertAt - 1];
+                --insertAt;
+            }
+            if (visibleCount < static_cast<int>(sizeof(visible) / sizeof(visible[0])))
+            {
+                visible[insertAt] = CarouselSlot{ slot, index };
+                ++visibleCount;
+            }
+        }
+
+        for (int drawn = 0; drawn < visibleCount; ++drawn)
+        {
+            const float slot = visible[drawn].slot;
+            const int index = visible[drawn].index;
+            const float distance = std::fabs(slot);
+            const float amount = std::min(1.0f, distance);
+
+            // 卡片滑到 ±1.5 槽位时淡出，避免环形边界处瞬间翻到另一侧
+            const float edgeAlpha = std::clamp((1.5f - distance) / 0.3f, 0.0f, 1.0f);
+            if (edgeAlpha <= 0.0f)
+            {
+                continue;
+            }
+
+            const float scale = 1.0f + (neighborScale - 1.0f) * amount;
+            const float cardW = cardWidth * scale;
+            const float cardH = cardHeight * scale;
+            const float cardCenterX = centerX + slot * stepX;
+            const ImVec2 cardMin(cardCenterX - cardW * 0.5f, centerY - cardH * 0.5f);
+            const ImVec2 cardMax(cardMin.x + cardW, cardMin.y + cardH);
+            if (cardMax.x <= pos.x || cardMin.x >= maxPos.x)
+            {
+                continue;
+            }
+
+            // 命中：每张卡片每帧只提交一次 InvisibleButton
+            ImGui::PushID(index);
+            const ImVec2 savedCursor = ImGui::GetCursorScreenPos();
+            ImGui::SetCursorScreenPos(cardMin);
+            const bool clicked = ImGui::InvisibleButton("##card", ImVec2(cardW, cardH));
+            const bool hovered = ImGui::IsItemHovered();
+            ImGui::SetCursorScreenPos(savedCursor);
+            ImGui::PopID();
+
+            if (clicked && index != target)
+            {
+                pendingIndex = index;
+            }
+
+            const float rounding = tokens.radius.section;
+            const GuiCarouselItem& item = items[index];
+
+            // 阴影：中心 20/10/0.30，邻居 14/6/0.20，按槽位连续插值
+            GuiShadowStyle shadow;
+            shadow.blur = 20.0f + (14.0f - 20.0f) * amount;
+            shadow.offsetX = 0.0f;
+            shadow.offsetY = 10.0f + (6.0f - 10.0f) * amount;
+            shadow.color = GuiColor(0.0f, 0.0f, 0.0f,
+                                    (0.30f + (0.20f - 0.30f) * amount) * edgeAlpha);
+            DrawGuiSoftShadow(drawList, cardMin, ImVec2(cardW, cardH), shadow, rounding);
+
+            // 卡片主体：纹理或表面色占位
+            if (item.texture != nullptr)
+            {
+                drawList->AddImageRounded((ImTextureID)item.texture, cardMin, cardMax,
+                                          ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f),
+                                          IM_COL32(255, 255, 255, static_cast<int>(255.0f * edgeAlpha)),
+                                          rounding);
+            }
+            else
+            {
+                drawList->AddRectFilled(cardMin, cardMax,
+                                        WithAlpha(tokens.surfaceHover, edgeAlpha).ToImU32(), rounding);
+            }
+            if (hovered && index != target)
+            {
+                drawList->AddRectFilled(cardMin, cardMax,
+                                        IM_COL32(255, 255, 255, static_cast<int>(14.0f * edgeAlpha)),
+                                        rounding);
+            }
+            drawList->AddRect(cardMin, cardMax,
+                              WithAlpha(tokens.border,
+                                        (0.60f + (0.35f - 0.60f) * amount) * edgeAlpha).ToImU32(),
+                              rounding, ImDrawFlags_RoundCornersAll, 1.0f);
+
+            // 底部渐变 + 标题 / 副标题
+            const float overlayHeight = cardH * 0.38f;
+            const ImVec2 overlayMin(cardMin.x, cardMax.y - overlayHeight);
+            const int overlayAlpha = static_cast<int>(180.0f * edgeAlpha);
+            drawList->AddRectFilledMultiColor(overlayMin, cardMax,
+                                              IM_COL32(0, 0, 0, 0), IM_COL32(0, 0, 0, 0),
+                                              IM_COL32(0, 0, 0, overlayAlpha),
+                                              IM_COL32(0, 0, 0, overlayAlpha));
+
+            ImFont* font = ImGui::GetFont();
+            if (font != nullptr)
+            {
+                float textBottom = cardMax.y - 10.0f;
+                if (item.subtitle != nullptr && item.subtitle[0] != '\0')
+                {
+                    const float subtitleSize = tokens.typography.label * scale;
+                    const ImVec2 extent = font->CalcTextSizeA(subtitleSize, cardW - 16.0f,
+                                                              cardW - 16.0f, item.subtitle);
+                    drawList->AddText(font, subtitleSize,
+                                      ImVec2(cardMin.x + (cardW - extent.x) * 0.5f,
+                                             textBottom - extent.y),
+                                      IM_COL32(255, 255, 255, static_cast<int>(200.0f * edgeAlpha)),
+                                      item.subtitle);
+                    textBottom -= extent.y + 2.0f;
+                }
+                if (item.title != nullptr && item.title[0] != '\0')
+                {
+                    const float titleSize = tokens.typography.subtitle * scale;
+                    const ImVec2 extent = font->CalcTextSizeA(titleSize, cardW - 16.0f,
+                                                              cardW - 16.0f, item.title);
+                    drawList->AddText(font, titleSize,
+                                      ImVec2(cardMin.x + (cardW - extent.x) * 0.5f,
+                                             textBottom - extent.y),
+                                      IM_COL32(255, 255, 255, static_cast<int>(250.0f * edgeAlpha)),
+                                      item.title);
                 }
             }
         }
@@ -895,7 +1020,7 @@ namespace GuiBase
 
         auto drawArrow = [&](int buttonIndex, const ImVec2& buttonCenter, const char* icon) -> bool
         {
-            ImGui::PushID(buttonIndex);
+            ImGui::PushID(1000 + buttonIndex);
             const ImVec2 savedCursor = ImGui::GetCursorScreenPos();
             ImGui::SetCursorScreenPos(ImVec2(buttonCenter.x - halfButton, buttonCenter.y - halfButton));
             const bool arrowClicked = ImGui::InvisibleButton("##arrow", ImVec2(buttonSize, buttonSize));
@@ -922,21 +1047,21 @@ namespace GuiBase
             return arrowClicked;
         };
 
+        // 箭头点击只记录目标索引，绘制仍使用本帧固定的 animIndex
         const bool wrap = (itemCount > 1);
         if (wrap && drawArrow(0, leftCenter, ICON_FA_CHEVRON_LEFT))
         {
-            current = (current - 1 + itemCount) % itemCount;
-            changed = true;
+            pendingIndex = (target - 1 + itemCount) % itemCount;
         }
         if (wrap && drawArrow(1, rightCenter, ICON_FA_CHEVRON_RIGHT))
         {
-            current = (current + 1) % itemCount;
-            changed = true;
+            pendingIndex = (target + 1) % itemCount;
         }
 
+        const bool changed = (pendingIndex != originalIndex);
         if (changed)
         {
-            *selectedIndex = current;
+            *selectedIndex = pendingIndex;
         }
 
         // 底部指示点
@@ -948,7 +1073,7 @@ namespace GuiBase
             float dotX = centerX - dotsWidth * 0.5f;
             for (int index = 0; index < itemCount; ++index)
             {
-                if (index == current)
+                if (index == pendingIndex)
                 {
                     drawList->AddRectFilled(ImVec2(dotX - 9.0f, dotY - 3.0f),
                                             ImVec2(dotX + 9.0f, dotY + 3.0f),
@@ -967,4 +1092,193 @@ namespace GuiBase
         ImGui::PopID();
         return changed;
     }
-}
+
+    // =========================================================================
+    // 可定制数据表格
+    // 在 ImGui 表格之上做一层薄封装：列定义 / 尺寸 / flags 组装由这里负责，
+    // 单元格内容由调用方用 GuiText / GuiImage / GuiTableCellProgress 自绘。
+    // 列索引统一按「可见列序号」编号（跳过 visible=false 的列）。
+    // =========================================================================
+    bool BeginGuiTable(const char* label, const GuiTableColumn* columns, int columnCount,
+                       const GuiTableOptions& options)
+    {
+        if (columns == nullptr || columnCount <= 0)
+        {
+            return false;
+        }
+
+        int visibleCount = 0;
+        for (int index = 0; index < columnCount; ++index)
+        {
+            if (columns[index].visible)
+            {
+                ++visibleCount;
+            }
+        }
+        if (visibleCount <= 0)
+        {
+            return false;
+        }
+
+        ImGuiTableFlags tableFlags = ImGuiTableFlags_SizingStretchProp;
+        if (options.resizable) tableFlags |= ImGuiTableFlags_Resizable;
+        if (options.sortable) tableFlags |= ImGuiTableFlags_Sortable;
+        if (options.rowBackground) tableFlags |= ImGuiTableFlags_RowBg;
+        if (options.bordersInnerV) tableFlags |= ImGuiTableFlags_BordersInnerV;
+        if (options.scrollY) tableFlags |= ImGuiTableFlags_ScrollY;
+        if (options.padOuterX) tableFlags |= ImGuiTableFlags_PadOuterX;
+
+        ImGui::PushID(label != nullptr ? label : "##gui_table");
+        const ImVec2 avail = ImGui::GetContentRegionAvail();
+        const ImVec2 size(options.size.x > 0.0f ? options.size.x : avail.x,
+                          options.size.y > 0.0f ? options.size.y : avail.y);
+
+        if (!ImGui::BeginTable("##table", visibleCount, tableFlags, size))
+        {
+            ImGui::PopID();
+            return false;
+        }
+
+        for (int index = 0; index < columnCount; ++index)
+        {
+            const GuiTableColumn& column = columns[index];
+            if (!column.visible)
+            {
+                continue;
+            }
+
+            const char* header = (column.header != nullptr) ? column.header : "";
+            ImGuiTableColumnFlags columnFlags = column.flags;
+            if (column.width > 0.0f)
+            {
+                columnFlags |= ImGuiTableColumnFlags_WidthFixed;
+                ImGui::TableSetupColumn(header, columnFlags, column.width);
+            }
+            else
+            {
+                columnFlags |= ImGuiTableColumnFlags_WidthStretch;
+                ImGui::TableSetupColumn(header, columnFlags);
+            }
+        }
+
+        return true;
+    }
+
+    void EndGuiTable()
+    {
+        ImGui::EndTable();
+        ImGui::PopID();
+    }
+
+    void GuiTableHeadersRow()
+    {
+        const ImVec2 top = ImGui::GetCursorScreenPos();
+        ImGui::TableHeadersRow();
+        const ImVec2 bottom = ImGui::GetCursorScreenPos();
+        const float width = ImGui::GetContentRegionAvail().x;
+        GuiTableHeaderHit& hit = GetGuiTableHeaderHit(ImGui::GetID("##gui_table_header"));
+        hit.rect = ImRect(top, ImVec2(top.x + width, bottom.y));
+        hit.frame = ImGui::GetFrameCount();
+    }
+
+    bool GuiTableConsumeSort(int* column, bool* ascending)
+    {
+        ImGuiTableSortSpecs* specs = ImGui::TableGetSortSpecs();
+        if (specs == nullptr || !specs->SpecsDirty || specs->SpecsCount <= 0)
+        {
+            return false;
+        }
+
+        const ImGuiTableColumnSortSpecs& spec = specs->Specs[0];
+        if (column != nullptr)
+        {
+            *column = static_cast<int>(spec.ColumnIndex);
+        }
+        if (ascending != nullptr)
+        {
+            *ascending = (spec.SortDirection == ImGuiSortDirection_Ascending);
+        }
+        specs->SpecsDirty = false;
+        return true;
+    }
+
+    void GuiTableNextRow()
+    {
+        ImGui::TableNextRow();
+    }
+
+    void GuiTableCell(int column, bool alignTextToFramePadding)
+    {
+        ImGui::TableSetColumnIndex(column);
+        if (alignTextToFramePadding)
+        {
+            ImGui::AlignTextToFramePadding();
+        }
+    }
+
+    void GuiTableCellProgress(float value, float width, const GuiColor& fill, const GuiColor& track)
+    {
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        const ImVec2 pos = ImGui::GetCursorScreenPos();
+        const float barHeight = 6.0f;
+        const float y = pos.y + (ImGui::GetTextLineHeight() - barHeight) * 0.5f;
+        DrawGuiProgress(drawList, ImVec2(pos.x, y), ImVec2(width, barHeight),
+                        std::clamp(value, 0.0f, 1.0f), fill, track);
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + width + ImGui::GetStyle().ItemSpacing.x);
+    }
+
+    void GuiTableRows(int rowCount, const std::function<void(int)>& rowCallback)
+    {
+        if (rowCount <= 0 || !rowCallback)
+        {
+            return;
+        }
+
+        ImGuiListClipper clipper;
+        clipper.Begin(rowCount);
+        while (clipper.Step())
+        {
+            for (int index = clipper.DisplayStart; index < clipper.DisplayEnd; ++index)
+            {
+                rowCallback(index);
+            }
+        }
+        clipper.End();
+    }
+
+    void GuiTableHeaderColumnMenu(const char* label, const GuiTableColumnToggle* items, int itemCount)
+    {
+        if (items == nullptr || itemCount <= 0)
+        {
+            return;
+        }
+
+        const char* popupId = (label != nullptr && label[0] != '\0') ? label : "##gui_table_columns";
+        // 表头行任意位置右键都可打开（GuiTableHeadersRow 记录了整行命中区域）
+        const GuiTableHeaderHit& hit = GetGuiTableHeaderHit(ImGui::GetID("##gui_table_header"));
+        const bool headerHovered = (hit.frame == ImGui::GetFrameCount()) &&
+                                   ImGui::IsMouseHoveringRect(hit.rect.Min, hit.rect.Max);
+        if (ImGui::IsMouseReleased(ImGuiMouseButton_Right) && (headerHovered || ImGui::IsItemHovered()))
+        {
+            ImGui::OpenPopup(popupId);
+        }
+
+        if (!ImGui::BeginPopup(popupId))
+        {
+            return;
+        }
+
+        const GuiThemeTokens tokens = Theme::Dark();
+        GuiText("##columns_title", "列设置", 0.0f, WithAlpha(tokens.text, 0.72f));
+        ImGui::Separator();
+        for (int index = 0; index < itemCount; ++index)
+        {
+            if (items[index].value == nullptr)
+            {
+                continue;
+            }
+            GuiCheckbox(items[index].label != nullptr ? items[index].label : "", items[index].value);
+        }
+        ImGui::EndPopup();
+    }
+    }

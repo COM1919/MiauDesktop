@@ -9,18 +9,7 @@
 
 // =============================================================================
 // TimeDisplay：时间显示组件
-//
-// 内容层级（自上而下）：
-//   1. 主时间 HH:MM —— 唯一的主信息，最大字号、最高对比度
-//   2. 秒 / 上午下午 —— 主字号的派生小字，底部基线对齐，降低对比度
-//   3. 日期行 —— 次级文字色，字号随主字号缩放但夹在可读区间
-//   4. 当天进度条 —— 低对比度装饰，悬停时才给出百分比
-//
-// 布局约束：
-//   · 辅助字号由主字号派生，不低于 12px（界面文字的可读性下限）
-//   · 冒号闪烁只改变透明度、不改变宽度，避免每秒布局跳动
-//   · 所有行共用同一内容块宽度，整体可按设置居左 / 居中 / 居右
-//   · 窗口尺寸由字号与内容反推（禁止手动缩放），改字号后自动适配
+// 没什么好说的
 // =============================================================================
 class TimeDisplay : public Component
 {
@@ -180,18 +169,13 @@ protected:
         const float secondWidth = TextWidth(font, smallFontSize, secondText);
         const float periodWidth = TextWidth(font, periodFontSize, periodText);
 
-        const float timeLineWidth = hourWidth + colonWidth + minuteWidth +
-                                    (secondText.empty() ? 0.0f : kSecondGap + secondWidth) +
-                                    (periodText.empty() ? 0.0f : kPeriodGap + periodWidth);
+        const float timeLineWidth = hourWidth + colonWidth + minuteWidth + (secondText.empty() ? 0.0f : kSecondGap + secondWidth) + (periodText.empty() ? 0.0f : kPeriodGap + periodWidth);
 
         const std::string dateText = BuildDateText(now);
         const float dateWidth = TextWidth(font, dateFontSize, dateText);
 
         // 内容块宽度：所有行共用，保证居左 / 居中 / 居右时边缘一致
-        const float blockWidth = std::max({ timeLineWidth,
-                                            m_showDate ? dateWidth : 0.0f,
-                                            m_showProgress ? kMinBarWidth : 0.0f,
-                                            kMinBlockWidth });
+        const float blockWidth = std::max({ timeLineWidth, m_showDate ? dateWidth : 0.0f, m_showProgress ? kMinBarWidth : 0.0f, kMinBlockWidth });
 
         const ImVec2 contentPos = ImGui::GetCursorScreenPos();
         const ImVec2 contentAvail = ImGui::GetContentRegionAvail();
@@ -221,15 +205,13 @@ protected:
         if (!secondText.empty())
         {
             cursorX += kSecondGap;
-            drawList->AddText(font, smallFontSize, ImVec2(cursorX, top + mainAscent - smallAscent),
-                              subColor, secondText.c_str());
+            drawList->AddText(font, smallFontSize, ImVec2(cursorX, top + mainAscent - smallAscent), subColor, secondText.c_str());
             cursorX += secondWidth;
         }
         if (!periodText.empty())
         {
             cursorX += kPeriodGap;
-            drawList->AddText(font, periodFontSize, ImVec2(cursorX, top + mainAscent - periodAscent),
-                              subColor, periodText.c_str());
+            drawList->AddText(font, periodFontSize, ImVec2(cursorX, top + mainAscent - periodAscent), subColor, periodText.c_str());
         }
 
         // ---- 日期行：次级文字，字号随主字号缩放 ----
@@ -237,9 +219,7 @@ protected:
         if (m_showDate && !dateText.empty())
         {
             const float dateTop = nextRowY + kDateGap;
-            drawList->AddText(font, dateFontSize,
-                              ImVec2(AlignedX(contentPos.x, contentAvail.x, dateWidth), dateTop),
-                              subColor, dateText.c_str());
+            drawList->AddText(font, dateFontSize, ImVec2(AlignedX(contentPos.x, contentAvail.x, dateWidth), dateTop), subColor, dateText.c_str());
             nextRowY = dateTop + DateLineHeight();
         }
 
@@ -254,8 +234,7 @@ protected:
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("今天已过去 %d%%", static_cast<int>(progress * 100.0f + 0.5f));
 
-            GuiBase::DrawGuiProgress(drawList, ImVec2(left, barY), ImVec2(blockWidth, kBarHeight),
-                                     progress, tokens.primary, GuiBase::WithAlpha(tokens.text, 0.12f));
+            GuiBase::DrawGuiProgress(drawList, ImVec2(left, barY), ImVec2(blockWidth, kBarHeight), progress, tokens.primary, GuiBase::WithAlpha(tokens.text, 0.12f));
         }
     }
 
@@ -449,22 +428,10 @@ private:
         }
     }
 
-    // =========================================================================
-    // 窗口尺寸：由字号与当前显示项推算（禁止手动缩放，避免留白与裁切）
-    // 注意：这里刻意不调用 ImGui 字体度量 —— 构造与配置加载发生在 NewFrame
-    //       之前，此时取字体 baked 数据不可靠，会得出无效尺寸。
-    //       绘制时仍按真实字体宽度排版，窗口宽度只是留足余量。
-    // =========================================================================
     void UpdateWindowSize()
     {
-        const float contentWidth = std::max({ EstimateTimeWidth(),
-                                              m_showDate ? EstimateDateWidth() : 0.0f,
-                                              m_showProgress ? kMinBarWidth : 0.0f,
-                                              kMinBlockWidth });
-
-        // 估算值放大 10%：不同字体字宽有偏差，宁可窗口略宽也不要裁掉字形
-        SetWindowSize(ImVec2(contentWidth * 1.10f + kPaddingX * 2.0f + 2.0f,
-                             ContentHeight() + kPaddingY * 2.0f + 2.0f));
+        const float contentWidth = std::max({ EstimateTimeWidth(), m_showDate ? EstimateDateWidth() : 0.0f,  m_showProgress ? kMinBarWidth : 0.0f, kMinBlockWidth });
+        SetWindowSize(ImVec2(contentWidth + kPaddingX * 2.0f + 2.0f, ContentHeight() + kPaddingY * 2.0f + 2.0f));
     }
 
     // "00:00" 约 2.5em（数字 0.55em × 4 + 冒号 0.3em）
@@ -473,9 +440,9 @@ private:
         const float main = static_cast<float>(m_fontSize);
         float width = main * 2.5f;
         if (m_showSeconds)
-            width += kSecondGap + SmallFontSize() * 1.6f;    // ":00"
+            width += kSecondGap + SmallFontSize() * 1.6f;   // ":00"
         if (!m_format24Hour)
-            width += kPeriodGap + PeriodFontSize() * 2.1f;   // "上午"
+            width += kPeriodGap + PeriodFontSize() * 2.1f;  // "上午"
         return width;
     }
 
@@ -483,9 +450,9 @@ private:
     float EstimateDateWidth() const
     {
         const float size = DateFontSize();
-        float width = size * 6.0f;                            // 日期本体
+        float width = size * 6.0f; // 日期本体
         if (m_showWeekday)
-            width += size * 4.3f;                             // " · 星期三"
+            width += size * 4.3f;  // " · 星期三"
         return width;
     }
 };

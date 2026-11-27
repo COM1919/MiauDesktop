@@ -38,6 +38,9 @@ using namespace winrt::Windows::Storage::Streams;
 #include <shared_mutex>
 #include <filesystem>
 
+#include <winhttp.h>
+#pragma comment(lib, "winhttp.lib")
+
 #include <pdh.h>
 #pragma comment(lib, "pdh.lib")
 
