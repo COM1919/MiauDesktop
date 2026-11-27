@@ -2,21 +2,25 @@
 readme暂时没时间细写，简单说一下吧。
 本项目正在开发中，已经初步可用，但是使用体验仍然需要优化。
 
-### MiauDesktop - 猫猫桌面
-#### 一个华丽桌面组件项目，追求轻量、实用、美观、功能强大
+# MiauDesktop - 猫猫桌面
+
+### 一个华丽桌面组件项目，追求轻量、实用、美观、功能强大
 
 # 图片
-![pcis-main](docs/pcis-main.png)
-![pics-settings1](docs/pics-settings1.png)
-![pics-settings2](docs/pics-settings2.png)
+
+!\[pcis-main](docs/pcis-main.jpg)
+!\[pics-settings1](docs/pics-settings1.png)
+!\[pics-settings2](docs/pics-settings2.png)
 
 # 项目结构
+
 MiauDesktop：桌面组件的主程序。
 MiauSettings：设置UI，也就是设置界面。
 
 设置界面和主程序使用管道通信，使用体验目前有点差。
 
 # 关于项目的开发
+
 本项目部分使用AI开发。
 整个项目的底层框架由本人手动编写（AI仅辅助提供建议）。
 在框架、功能、UI封装成熟后，本人使用了AI直接开发组件代码，让AI通过我暴露的接口进行开发组件。
