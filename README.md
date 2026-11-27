@@ -1,16 +1,14 @@
-##### 项目介绍
+#### 项目介绍
 readme暂时没时间细写，简单说一下吧。
 本项目正在开发中，已经初步可用，但是使用体验仍然需要优化。
 
 # MiauDesktop - 猫猫桌面
-
 ### 一个华丽桌面组件项目，追求轻量、实用、美观、功能强大
 
 # 图片
-
-!\[pcis-main](docs/pcis-main.jpg)
-!\[pics-settings1](docs/pics-settings1.png)
-!\[pics-settings2](docs/pics-settings2.png)
+![pcis-main](docs/pcis-main.jpg)
+![pics-settings1](docs/pics-settings1.png)
+![pics-settings2](docs/pics-settings2.png)
 
 # 项目结构
 
