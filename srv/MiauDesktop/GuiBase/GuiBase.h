@@ -669,6 +669,69 @@ namespace GuiBase
     void DrawGuiProgress(ImDrawList* drawList, ImVec2 pos, ImVec2 size,
                          float value, GuiColor fillColor, GuiColor trackColor);
 
+    // 进度条控件参数（对应 EUI-NEO progress.h 的 ProgressBuilder）
+    struct GuiProgressOptions
+    {
+        float width = 0.0f;          // 0 = 可用宽度
+        float height = 14.0f;
+        float radius = -1.0f;        // < 0 = 高度一半（胶囊）
+        GuiColor trackColor = GuiColor(0.0f, 0.0f, 0.0f, 0.0f);         // alpha = 0 时使用主题 surfaceHover
+        GuiColor fillColor = GuiColor(0.0f, 0.0f, 0.0f, 0.0f);          // alpha = 0 时使用主题 primary
+        bool showLabel = false;      // 右侧显示百分比
+        GuiTransition transition = GuiTransition::Make(0.18f, GuiEase::OutCubic);
+    };
+
+    // 进度条控件：轨道 + 填充 + 帧率无关的值过渡（0..1）
+    void GuiProgress(const char* label, float value,
+                     const GuiProgressOptions& options = GuiProgressOptions());
+
+    // 交互式图表控件参数（对应 EUI-NEO barchart/linechart/piechart 的 Builder：
+    // 值过渡 / hover tooltip / 标签；尺寸 0 时取可用宽度）
+    struct GuiChartOptions
+    {
+        float width = 0.0f;        // 0 = 可用宽度
+        float height = 200.0f;
+        bool showTooltip = true;
+        bool animate = true;
+        GuiTransition transition = GuiTransition::Make(0.24f, GuiEase::OutCubic);
+    };
+
+    // 在 DrawGui* 绘制之上叠加 hover tooltip 与值过渡
+    void GuiBarChart(const char* label, const float* values, int count,
+                     const char* const* labels, const char* title,
+                     const GuiChartStyle& style = GuiChartStyle(),
+                     const GuiChartOptions& options = GuiChartOptions());
+    void GuiLineChart(const char* label, const float* values, int count,
+                      const char* const* labels, const char* title,
+                      GuiLineStyle lineStyle = GuiLineStyle::Linear,
+                      const GuiChartStyle& style = GuiChartStyle(),
+                      const GuiChartOptions& options = GuiChartOptions());
+    void GuiPieChart(const char* label, const float* values, int count,
+                     const char* const* labels,
+                     const GuiChartStyle& style = GuiChartStyle(),
+                     const GuiChartOptions& options = GuiChartOptions());
+
+    // =========================================================================
+    // 时钟控件（对应 EUI-NEO apps/clock 的模拟表盘 + 数字时间 + 日期）
+    // =========================================================================
+    struct GuiClockOptions
+    {
+        bool showSeconds = true;
+        bool use24Hour = true;
+        bool useLocalTime = true;   // true = 本地时区；false = UTC
+        int utcOffsetMinutes = 0;   // 在本地 / UTC 基础上的额外分钟偏移
+        bool showDigitalTime = true;
+        bool showDate = true;
+        GuiColor faceColor = GuiColor(0.0f, 0.0f, 0.0f, 0.0f);         // alpha = 0 时使用主题 surface
+        GuiColor tickColor = GuiColor(0.0f, 0.0f, 0.0f, 0.0f);
+        GuiColor handColor = GuiColor(0.0f, 0.0f, 0.0f, 0.0f);
+        GuiColor accentColor = GuiColor(0.0f, 0.0f, 0.0f, 0.0f);
+        GuiColor textColor = GuiColor(0.0f, 0.0f, 0.0f, 0.0f);
+    };
+
+    void GuiClock(const char* label, const ImVec2& size = ImVec2(180.0f, 220.0f),
+                  const GuiClockOptions& options = GuiClockOptions());
+
     // =========================================================================
     // 基础控件 + 纹理系统（GUIBase.cpp）
     // =========================================================================
@@ -729,12 +792,36 @@ namespace GuiBase
     bool GuiPillButton(const char* label, const ImVec2& size = ImVec2(0, 0));
 
     // 滑块（浮点）
+    // 滑块（浮点）
     bool GuiSliderFloat(const char* label, float* value, float vMin, float vMax,
                         const char* format = "%.2f");
 
     // 滑块（整数）
     bool GuiSliderInt(const char* label, int* value, int vMin, int vMax,
                       const char* format = "%d");
+
+    // 滑块扩展参数（对应 EUI-NEO slider.h：disabled / 自定义尺寸与配色 / 键盘步进）
+    struct GuiSliderOptions
+    {
+        float width = 220.0f;
+        float height = 24.0f;
+        bool disabled = false;
+        float trackHeight = 0.0f;   // 0 = 按高度自动
+        float knobSize = 0.0f;      // 0 = 按高度自动
+        GuiColor trackColor = GuiColor(0.0f, 0.0f, 0.0f, 0.0f);        // alpha = 0 时使用主题色
+        GuiColor fillColor = GuiColor(0.0f, 0.0f, 0.0f, 0.0f);
+        GuiColor knobColor = GuiColor(0.0f, 0.0f, 0.0f, 0.0f);
+        GuiColor textColor = GuiColor(0.0f, 0.0f, 0.0f, 0.0f);
+        std::function<void()> onChange;
+    };
+
+    // 键盘：方向键 ±1%，PageUp/PageDown ±10%，Home/End 到两端
+    bool GuiSliderFloatEx(const char* label, float* value, float vMin, float vMax,
+                          const char* format = "%.2f",
+                          const GuiSliderOptions& options = GuiSliderOptions());
+    bool GuiSliderIntEx(const char* label, int* value, int vMin, int vMax,
+                        const char* format = "%d",
+                        const GuiSliderOptions& options = GuiSliderOptions());
 
     // 开关
     bool GuiSwitch(const char* label, bool* value);
@@ -744,6 +831,38 @@ namespace GuiBase
 
     // 单选
     bool GuiRadio(const char* label, bool* value);
+
+    // 复选 / 单选扩展参数（对应 EUI-NEO checkbox.h / radio.h 的
+    // disabled / fontSize / boxSize / dotSize / transition / onChange）
+    struct GuiCheckboxOptions
+    {
+        bool disabled = false;
+        float fontSize = 0.0f;   // 0 = 主题 control 字号
+        float boxSize = 0.0f;    // 0 = 主题 indicator 尺寸
+        GuiColor boxColor = GuiColor(0.0f, 0.0f, 0.0f, 0.0f);       // alpha = 0 时使用主题色
+        GuiColor checkedColor = GuiColor(0.0f, 0.0f, 0.0f, 0.0f);
+        GuiColor markColor = GuiColor(0.0f, 0.0f, 0.0f, 0.0f);
+        GuiColor textColor = GuiColor(0.0f, 0.0f, 0.0f, 0.0f);
+        GuiTransition transition = GuiTransition::Make(0.16f, GuiEase::OutCubic);
+        std::function<void(bool)> onChange;
+    };
+
+    struct GuiRadioOptions
+    {
+        bool disabled = false;
+        float fontSize = 0.0f;
+        float dotSize = 0.0f;
+        GuiColor outerColor = GuiColor(0.0f, 0.0f, 0.0f, 0.0f);
+        GuiColor selectedColor = GuiColor(0.0f, 0.0f, 0.0f, 0.0f);
+        GuiColor textColor = GuiColor(0.0f, 0.0f, 0.0f, 0.0f);
+        GuiTransition transition = GuiTransition::Make(0.16f, GuiEase::OutCubic);
+        std::function<void(bool)> onChange;
+    };
+
+    bool GuiCheckboxEx(const char* label, bool* value,
+                       const GuiCheckboxOptions& options = GuiCheckboxOptions());
+    bool GuiRadioEx(const char* label, bool* value,
+                    const GuiRadioOptions& options = GuiRadioOptions());
 
     // 分段控件（返回 true 表示选中项变化）
     bool GuiSegmented(const char* label, const char* const* items, int itemCount,
@@ -890,11 +1009,50 @@ namespace GuiBase
     bool GuiDropdown(const char* label, const char* const* items, int itemCount,
                      int* selectedIndex);
 
+    // 下拉扩展参数（对应 EUI-NEO dropdown.h：placeholder / open / openUp /
+    // itemHeight / disabled / onOpenChange）
+    struct GuiDropdownOptions
+    {
+        const char* placeholder = "请选择";
+        bool open = false;              // 受控为 true 时打开；配合 onOpenChange 使用
+        bool openUp = false;            // 向上弹出
+        float itemHeight = 30.0f;
+        bool disabled = false;
+        std::function<void(bool)> onOpenChange;
+    };
+
+    bool GuiDropdownEx(const char* label, const char* const* items, int itemCount,
+                       int* selectedIndex, const GuiDropdownOptions& options = GuiDropdownOptions());
+
     // 颜色选择器（RGBA 浮点数组，返回 true 表示颜色变化）
     bool GuiColorPicker(const char* label, float color[4]);
 
+    // 颜色选择器扩展参数（对应 EUI-NEO colorpicker.h：弹层色板 / 预设色 / 受控 open）
+    struct GuiColorPickerOptions
+    {
+        bool open = false;
+        bool showAlpha = true;
+        std::vector<GuiColor> swatches;   // 空 = 默认 8 色预设
+        std::function<void(bool)> onOpenChange;
+        std::function<void(const float*)> onChange;
+    };
+
+    bool GuiColorPickerEx(const char* label, float color[4],
+                          const GuiColorPickerOptions& options = GuiColorPickerOptions());
+
     // 日期选择器（返回 true 表示日期变化）
     bool GuiDatePicker(const char* label, int* year, int* month, int* day);
+
+    // 日期选择器扩展参数（对应 EUI-NEO datepicker.h：弹层三列滚轮 / 受控 open）
+    struct GuiDatePickerOptions
+    {
+        bool open = false;
+        bool openUp = false;
+        std::function<void(bool)> onOpenChange;
+    };
+
+    bool GuiDatePickerEx(const char* label, int* year, int* month, int* day,
+                         const GuiDatePickerOptions& options = GuiDatePickerOptions());
 
     // 时间选择器（返回 true 表示时间变化；minuteStep 为分钟步进，clamp 到 [1, 30]）
     bool GuiTimePicker(const char* label, int* hour, int* minute, int minuteStep = 1);
@@ -1101,6 +1259,31 @@ namespace GuiBase
                        const GuiCardStyle& style = GuiCardStyle());
     void EndGuiPanel();
 
+    // =========================================================================
+    // Card 容器（对应 EUI-NEO components/card.h 的 CardBuilder）
+    // 与 BeginGuiPanel 的区别：支持尺寸 / 透明度过渡、内容高度自适应，
+    // 圆角 / 阴影 / 边框 / 内边距可配置；zIndex 参数在立即模式下不参与排序。
+    // =========================================================================
+    struct GuiCardOptions
+    {
+        float padding = 20.0f;
+        float radius = -1.0f;                    // < 0 时使用主题 section 圆角
+        GuiColor color = GuiColor(0.0f, 0.0f, 0.0f, 0.0f);                          // alpha = 0 时使用主题 surface
+        float borderWidth = 1.0f;
+        float borderAlpha = 0.72f;
+        bool shadow = true;
+        float opacity = 1.0f;
+        bool wrapContentHeight = false;          // true 时忽略 size.y，按内容高度
+        bool clipContent = true;
+        GuiTransition transition = GuiTransition::Make(0.18f, GuiEase::OutCubic);
+    };
+
+    // 开始 Card；返回 false 表示内容区不可见（仍需调用 EndGuiCard）
+    // size.y <= 0 或 wrapContentHeight 时，Card 高度由上一帧测得的内容高度决定
+    bool BeginGuiCard(const char* label, const ImVec2& size,
+                      const GuiCardOptions& options = GuiCardOptions());
+    void EndGuiCard();
+
     // 布局调试样式：外框 / 内边距 / 内容区 / 标签
     struct GuiLayoutDebugStyle
     {
@@ -1165,7 +1348,7 @@ namespace GuiBase
     {
         bool disabled = false;
         float rounding = 0.0f;
-        GuiColor color; // alpha<=0 时不绘制背景
+        GuiColor color = GuiColor(0.0f, 0.0f, 0.0f, 0.0f); // alpha<=0 时不绘制背景
         ImGuiMouseCursor cursor = ImGuiMouseCursor_Arrow;
         const char* tooltip = nullptr;
 
@@ -1237,8 +1420,16 @@ namespace GuiBase
         bool scrollbar = true;
         const char* placeholder = nullptr;
         int visibleLines = 3;                  // 多行时的可见行数
+        float fontSize = 0.0f;                 // 0 = 使用当前字号
+        ImFont* font = nullptr;                // 可选字体（对应 EUI fontFamily）
+        float inset = 8.0f;                    // 内容内边距
+        bool disabled = false;
+        bool password = false;
+        bool readOnly = false;
+        int maxLength = 0;                     // 0 = 不限制
         std::function<void()> onEnter;         // 单行：回车提交
         std::function<void(bool)> onFocus;     // 焦点变化
+        std::function<void(const std::string&)> onChange; // 每次编辑后回调
     };
     bool GuiInputTextEx(const char* label, std::string* value, const ImVec2& size = ImVec2(0.0f, 0.0f),
                         const GuiInputOptions& options = GuiInputOptions());
@@ -1272,8 +1463,14 @@ namespace GuiBase
     {
         const char* title = nullptr;
         const char* icon = nullptr;
-        std::function<void()> onDismiss;     // 手动关闭
-        std::function<void()> onAutoDismiss; // 到时自动关闭
+        float width = 380.0f;                    // 最大宽度
+        float height = 0.0f;                     // 0 = 按内容自适应
+        ImVec2 screen = ImVec2(0.0f, 0.0f);      // (0,0) = 当前视口尺寸
+        float margin = 16.0f;                    // 距屏幕边缘
+        float fadeInSeconds = 0.16f;
+        float fadeOutSeconds = 0.24f;
+        std::function<void()> onDismiss;         // 手动关闭
+        std::function<void()> onAutoDismiss;     // 到时自动关闭
     };
     void GuiToastEx(const char* text, float duration, const GuiToastOptions& options);
 
@@ -1345,6 +1542,22 @@ namespace GuiBase
     GuiColor GuiButtonHoverColor(const GuiThemeTokens& tokens, const GuiColor& base);
     GuiColor GuiButtonPressedColor(const GuiThemeTokens& tokens, const GuiColor& base);
     GuiShadowStyle GuiPopupShadow(const GuiThemeTokens& tokens);
+
+    // --- 主题派生工具（对应 EUI theme.h 的 border / buttonBorder / shadow /
+    //     resolveFieldFill，供 Card / 弹层 / 表单控件复用）---
+    struct GuiBorderStyle
+    {
+        float width = 1.0f;
+        GuiColor color = GuiColor(0.0f, 0.0f, 0.0f, 0.0f);
+    };
+
+    GuiBorderStyle GuiThemeBorder(const GuiThemeTokens& tokens, float width = 1.0f,
+                                  float opacity = 1.0f);
+    GuiBorderStyle GuiButtonBorder(const GuiThemeTokens& tokens, bool primary = true);
+    GuiColor GuiResolveFieldFill(const GuiThemeTokens& tokens, const GuiColor& baseColor,
+                                 float hoverAmount, float activeAmount);
+    GuiShadowStyle GuiButtonShadow(const GuiThemeTokens& tokens);
+    GuiShadowStyle GuiPanelShadow(const GuiThemeTokens& tokens);
 
     // --- 卡片轮播参数（GuiWorkshop.cpp，对应 card_slider.h:62-66）---
     struct GuiCardSliderOptions

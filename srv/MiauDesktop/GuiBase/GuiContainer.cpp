@@ -68,6 +68,23 @@ namespace GuiBase
         int g_panelDepth = 0;
         int g_panelOrphanEnds = 0; // Begin 被提前拒绝时的 End 计数（上限保护）
 
+        // Card 容器嵌套状态（与 Panel 分离，支持内容高度测量与过渡动画）
+        struct GuiCardRuntime
+        {
+            ImVec2 pos;
+            ImVec2 size;
+            float padding = 0.0f;
+            float contentTop = 0.0f;
+            bool pushedClip = false;
+            bool wrapHeight = false;
+            ImGuiID id = 0;
+        };
+
+        constexpr int kCardMaxDepth = 16;
+        GuiCardRuntime g_cardStack[kCardMaxDepth];
+        int g_cardDepth = 0;
+        int g_cardOrphanEnds = 0;
+
         // 抽屉滑入进度（每个抽屉一份动画状态）
         std::map<ImGuiID, GuiAnimatedValue<float>> g_sidebarProgress;
     }
@@ -469,6 +486,158 @@ namespace GuiBase
     // Begin 绘制 Card 背景（阴影 → 填充 → 边框）并把光标与裁剪推进到内容区，
     // End 恢复裁剪并把光标推进到面板下方。支持嵌套（8 层静态栈）。
     // =========================================================================
+    // =========================================================================
+    // Card 容器（对应 EUI-NEO components/card.h 的 CardBuilder）
+    // 背景由 DrawGuiCardBackground 绘制；内容区按 padding 内缩。
+    // 过渡动画只作用于背景尺寸 / 透明度，内容布局始终按目标尺寸计算，
+    // 避免动画期间文字与控件抖动。
+    // =========================================================================
+    bool BeginGuiCard(const char* label, const ImVec2& size, const GuiCardOptions& options)
+    {
+        const GuiThemeTokens tokens = Theme::Dark();
+        ImGui::PushID(label != nullptr ? label : "##gui_card");
+
+        const ImVec2 pos = ImGui::GetCursorScreenPos();
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        const ImGuiID id = ImGui::GetID("##state");
+        ImGuiStorage* storage = ImGui::GetStateStorage();
+
+        const bool valid = (size.x > 0.0f);
+        const float padding = std::max(0.0f, options.padding);
+        const float targetWidth = valid ? size.x : 1.0f;
+        const bool wrapHeight = valid && (options.wrapContentHeight || size.y <= 0.0f);
+
+        float targetHeight = valid ? size.y : 1.0f;
+        if (wrapHeight)
+        {
+            // 首帧还没有测量值：用 padding 高度占位，EndGuiCard 写入测量结果
+            float* measured = storage->GetFloatRef(id ^ 0x1A2B3C4Du, 0.0f);
+            targetHeight = (*measured > 0.0f) ? *measured : std::max(1.0f, padding * 2.0f + 1.0f);
+        }
+        targetHeight = std::max(1.0f, targetHeight);
+
+        // 尺寸 / 透明度过渡（帧率无关的指数平滑，duration 为约 95% 收敛时间）
+        const GuiTransition& transition = options.transition;
+        const float dt = std::clamp(ImGui::GetIO().DeltaTime, 0.0f, 0.1f);
+        const float duration = std::max(0.02f, transition.durationSeconds);
+        const float amount = transition.enabled
+                                 ? (1.0f - std::exp(-dt / (duration * 0.35f)))
+                                 : 1.0f;
+        float* animWidth = storage->GetFloatRef(id ^ 0x2B3C4D5Eu, targetWidth);
+        float* animHeight = storage->GetFloatRef(id ^ 0x3C4D5E6Fu, targetHeight);
+        float* animOpacity = storage->GetFloatRef(id ^ 0x4D5E6F70u,
+                                                  std::clamp(options.opacity, 0.0f, 1.0f));
+        *animWidth += (targetWidth - *animWidth) * amount;
+        *animHeight += (targetHeight - *animHeight) * amount;
+        *animOpacity += (std::clamp(options.opacity, 0.0f, 1.0f) - *animOpacity) * amount;
+        if (std::fabs(targetWidth - *animWidth) < 0.01f)
+        {
+            *animWidth = targetWidth;
+        }
+        if (std::fabs(targetHeight - *animHeight) < 0.01f)
+        {
+            *animHeight = targetHeight;
+        }
+
+        GuiCardStyle style(tokens);
+        style.padding = padding;
+        style.radius = (options.radius >= 0.0f) ? options.radius : tokens.radius.section;
+        if (options.color.a > 0.0f)
+        {
+            style.backgroundColor = options.color;
+        }
+        style.borderWidth = std::max(0.0f, options.borderWidth);
+        style.borderAlpha = std::clamp(options.borderAlpha, 0.0f, 1.0f);
+        style.opacity = std::clamp(*animOpacity, 0.0f, 1.0f);
+        if (!options.shadow)
+        {
+            style.shadow.blur = 0.0f;
+        }
+        style.shadow.color.a *= style.opacity;
+
+        if (valid)
+        {
+            DrawGuiCardBackground(drawList, pos,
+                                  ImVec2(std::max(1.0f, *animWidth), std::max(1.0f, *animHeight)),
+                                  style);
+        }
+
+        const ImVec2 contentMin(pos.x + padding, pos.y + padding);
+        const ImVec2 contentMax(pos.x + targetWidth - padding, pos.y + targetHeight - padding);
+        const bool hasContent = valid && (contentMax.x > contentMin.x) && (contentMax.y > contentMin.y);
+
+        // 自适应高度首帧不裁剪内容，保证测量到完整内容高度；固定高度才裁剪
+        const bool shouldClip = hasContent && options.clipContent && !wrapHeight;
+        if (shouldClip)
+        {
+            ImGui::PushClipRect(contentMin, contentMax, true);
+        }
+        if (hasContent)
+        {
+            ImGui::SetCursorScreenPos(contentMin);
+        }
+
+        if (g_cardDepth < kCardMaxDepth)
+        {
+            GuiCardRuntime& runtime = g_cardStack[g_cardDepth++];
+            runtime.pos = pos;
+            runtime.size = ImVec2(targetWidth, targetHeight);
+            runtime.padding = padding;
+            runtime.contentTop = contentMin.y;
+            runtime.pushedClip = shouldClip;
+            runtime.wrapHeight = wrapHeight;
+            runtime.id = id;
+        }
+        else
+        {
+            ++g_cardOrphanEnds;
+        }
+
+        return hasContent;
+    }
+
+    void EndGuiCard()
+    {
+        if (g_cardDepth <= 0)
+        {
+            if (g_cardOrphanEnds > 0 && g_cardOrphanEnds <= 64)
+            {
+                --g_cardOrphanEnds;
+                ImGui::PopID();
+            }
+            return;
+        }
+
+        GuiCardRuntime runtime = g_cardStack[g_cardDepth - 1];
+        --g_cardDepth;
+
+        if (runtime.pushedClip)
+        {
+            ImGui::PopClipRect();
+        }
+
+        if (runtime.wrapHeight)
+        {
+            // 内容底部：减去尾部 ItemSpacing，避免高度每帧累积增长
+            float contentBottom = ImGui::GetCursorScreenPos().y;
+            const float spacing = ImGui::GetStyle().ItemSpacing.y;
+            if (contentBottom > runtime.contentTop)
+            {
+                contentBottom = std::max(runtime.contentTop, contentBottom - spacing);
+            }
+            const float measured = std::max(1.0f,
+                                            contentBottom - runtime.contentTop + runtime.padding * 2.0f);
+            float* stored = ImGui::GetStateStorage()->GetFloatRef(runtime.id ^ 0x1A2B3C4Du, 0.0f);
+            *stored = measured;
+            ImGui::SetCursorScreenPos(ImVec2(runtime.pos.x, runtime.pos.y + measured));
+        }
+        else
+        {
+            ImGui::SetCursorScreenPos(ImVec2(runtime.pos.x, runtime.pos.y + runtime.size.y));
+        }
+        ImGui::PopID();
+    }
+
     bool BeginGuiPanel(const char* label, const ImVec2& size, const GuiCardStyle& style)
     {
         if (size.x <= 0.0f || size.y <= 0.0f)

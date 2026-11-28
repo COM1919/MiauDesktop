@@ -55,14 +55,26 @@ namespace GuiBase
             return MixColor(base, GuiColor(0.0f, 0.0f, 0.0f, base.a), tokens.isDark ? 0.34f : 0.22f);
         }
 
+        // 滑块颜色覆盖：alpha = 0 表示使用主题默认色
+        GuiColor SliderOptionColor(const GuiColor& option, const GuiColor& fallback)
+        {
+            return option.a > 0.0f ? option : fallback;
+        }
+
+        GuiColor SliderDisabledColor(const GuiColor& color, bool disabled)
+        {
+            return disabled ? WithAlpha(color, color.a * 0.45f) : color;
+        }
+
         // 滑块通用实现：轨道 + 填充 + 圆形把手，供浮点与整数版本复用
         bool SliderFloatImpl(const char* label, float* value, float vMin, float vMax,
-                             const char* valueText)
+                             const char* valueText, const GuiSliderOptions& options)
         {
             GuiThemeTokens tokens = Theme::Dark();
-            const float width = 220.0f;
-            const float height = 24.0f;
+            const float width = std::max(60.0f, options.width);
+            const float height = std::max(12.0f, options.height);
             const float gap = tokens.spacing.compact;
+            const bool disabled = options.disabled;
 
             ImGui::PushID(label);
 
@@ -72,18 +84,21 @@ namespace GuiBase
             ImVec2 valueSize = ImGui::CalcTextSize(valueText);
 
             ImVec2 pos = ImGui::GetCursorScreenPos();
-            ImGui::InvisibleButton("##gui_slider_hit", ImVec2(width, height));
-            bool hovered = ImGui::IsItemHovered();
-            bool active = ImGui::IsItemActive();
+            ImGui::InvisibleButton("##gui_slider_hit", ImVec2(width, height),
+                                   ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_EnableNav);
+            const bool hovered = ImGui::IsItemHovered();
+            const bool active = ImGui::IsItemActive();
+            const bool focused = ImGui::IsItemFocused();
 
             // 轨道左右边界：label 之后、值文本之前
             float trackLeft = pos.x + labelSize.x + (labelSize.x > 0.0f ? gap : 0.0f);
             float trackRight = pos.x + width - valueSize.x - (valueSize.x > 0.0f ? gap : 0.0f);
             float trackWidth = std::max(40.0f, trackRight - trackLeft);
 
-            // 拖拽：IsItemActive 期间让值跟随鼠标
             bool changed = false;
-            if (active)
+
+            // 鼠标拖动
+            if (!disabled && active)
             {
                 float t = (ImGui::GetIO().MousePos.x - trackLeft) / trackWidth;
                 t = std::clamp(t, 0.0f, 1.0f);
@@ -95,16 +110,87 @@ namespace GuiBase
                 }
             }
 
-            // 拖拽结束同样视为一次有效交互
+            // 键盘步进（EUI slider.h:110-128）：方向键 ±1%，Page ±10%，Home/End 到两端
+            if (!disabled && (focused || active))
+            {
+                const float step = (vMax - vMin) * 0.01f;
+                const float page = (vMax - vMin) * 0.1f;
+                float next = *value;
+                bool keyChanged = false;
+                if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow) || ImGui::IsKeyPressed(ImGuiKey_DownArrow))
+                {
+                    next -= step;
+                    keyChanged = true;
+                }
+                else if (ImGui::IsKeyPressed(ImGuiKey_RightArrow) || ImGui::IsKeyPressed(ImGuiKey_UpArrow))
+                {
+                    next += step;
+                    keyChanged = true;
+                }
+                else if (ImGui::IsKeyPressed(ImGuiKey_PageDown))
+                {
+                    next -= page;
+                    keyChanged = true;
+                }
+                else if (ImGui::IsKeyPressed(ImGuiKey_PageUp))
+                {
+                    next += page;
+                    keyChanged = true;
+                }
+                else if (ImGui::IsKeyPressed(ImGuiKey_Home))
+                {
+                    next = vMin;
+                    keyChanged = true;
+                }
+                else if (ImGui::IsKeyPressed(ImGuiKey_End))
+                {
+                    next = vMax;
+                    keyChanged = true;
+                }
+                if (keyChanged)
+                {
+                    next = std::clamp(next, vMin, vMax);
+                    if (std::fabs(next - *value) > 1e-6f)
+                    {
+                        *value = next;
+                        changed = true;
+                    }
+                }
+            }
+
             if (ImGui::IsItemDeactivated())
             {
                 changed = true;
             }
+            if (changed && options.onChange)
+            {
+                options.onChange();
+            }
+
+            // 配色：选项覆盖 → 主题默认；disabled 整体降透明度
+            GuiColor trackColor = SliderOptionColor(
+                options.trackColor,
+                hovered ? HoverColor(tokens, tokens.surfaceHover) : tokens.surfaceHover);
+            GuiColor fillColor = SliderOptionColor(options.fillColor, tokens.primary);
+            GuiColor knobColor = SliderOptionColor(options.knobColor, tokens.text);
+            GuiColor textColor = SliderOptionColor(options.textColor, tokens.text);
+            if (disabled)
+            {
+                trackColor = SliderDisabledColor(trackColor, true);
+                fillColor = SliderDisabledColor(fillColor, true);
+                knobColor = SliderDisabledColor(knobColor, true);
+                textColor = SliderDisabledColor(textColor, true);
+            }
 
             // 几何尺寸：细轨道 + 圆形把手
-            const float trackH = std::max(tokens.spacing.tiny - tokens.spacing.hairline, height * 0.18f);
+            const float trackH = options.trackHeight > 0.0f
+                                     ? options.trackHeight
+                                     : std::max(tokens.spacing.tiny - tokens.spacing.hairline,
+                                                height * 0.18f);
             const float trackY = pos.y + (height - trackH) * 0.5f;
-            const float knobSize = std::max(tokens.typography.label, height * 0.72f);
+            const float knobSize = options.knobSize > 0.0f
+                                       ? options.knobSize
+                                       : std::max(tokens.typography.label, height * 0.72f);
             const float knobRadius = knobSize * 0.5f;
             const float range = (vMax > vMin) ? (vMax - vMin) : 1.0f;
             float ratio = std::clamp((*value - vMin) / range, 0.0f, 1.0f);
@@ -112,36 +198,29 @@ namespace GuiBase
             knobCenterX = std::clamp(knobCenterX, trackLeft + knobRadius, trackLeft + trackWidth - knobRadius);
 
             ImDrawList* drawList = ImGui::GetWindowDrawList();
-
-            // 轨道底色（hover 时略微变亮）
-            GuiColor trackColor = hovered ? HoverColor(tokens, tokens.surfaceHover)
-                                          : tokens.surfaceHover;
-            drawList->AddRectFilled(ImVec2(trackLeft, trackY), ImVec2(trackLeft + trackWidth, trackY + trackH),
+            drawList->AddRectFilled(ImVec2(trackLeft, trackY),
+                                    ImVec2(trackLeft + trackWidth, trackY + trackH),
                                     trackColor.ToImU32(), trackH * 0.5f);
+            drawList->AddRectFilled(ImVec2(trackLeft, trackY),
+                                    ImVec2(knobCenterX, trackY + trackH),
+                                    fillColor.ToImU32(), trackH * 0.5f);
 
-            // 填充段（primary）
-            drawList->AddRectFilled(ImVec2(trackLeft, trackY), ImVec2(knobCenterX, trackY + trackH),
-                                    tokens.primary.ToImU32(), trackH * 0.5f);
-
-            // 圆形滑块把手（text 色，跟随拖动位置）
             ImVec2 knobCenter(knobCenterX, pos.y + height * 0.5f);
-            drawList->AddCircleFilled(knobCenter, knobRadius, tokens.text.ToImU32(), 24);
+            drawList->AddCircleFilled(knobCenter, knobRadius, knobColor.ToImU32(), 24);
 
-            // label 文本（垂直居中）
             if (!displayText.empty())
             {
                 ImVec2 textPos(pos.x, pos.y + (height - labelSize.y) * 0.5f);
-                drawList->AddText(textPos, tokens.text.ToImU32(), displayText.c_str());
+                drawList->AddText(textPos, textColor.ToImU32(), displayText.c_str());
             }
-
-            // 值文本（右对齐）
             ImVec2 valuePos(pos.x + width - valueSize.x, pos.y + (height - valueSize.y) * 0.5f);
-            drawList->AddText(valuePos, tokens.text.ToImU32(), valueText);
+            drawList->AddText(valuePos, textColor.ToImU32(), valueText);
 
             ImGui::PopID();
             return changed;
         }
-    }
+
+    } // namespace
 
     // =========================================================================
     // 按钮（EUI 三态色 + control 圆角）
@@ -232,13 +311,21 @@ namespace GuiBase
     }
 
     // =========================================================================
-    // 滑块（浮点）
+    // 滑块（浮点，兼容入口）
     // =========================================================================
     bool GuiSliderFloat(const char* label, float* value, float vMin, float vMax, const char* format)
     {
         char buffer[64];
         snprintf(buffer, sizeof(buffer), format, *value);
-        return SliderFloatImpl(label, value, vMin, vMax, buffer);
+        return SliderFloatImpl(label, value, vMin, vMax, buffer, GuiSliderOptions());
+    }
+
+    bool GuiSliderFloatEx(const char* label, float* value, float vMin, float vMax,
+                          const char* format, const GuiSliderOptions& options)
+    {
+        char buffer[64];
+        snprintf(buffer, sizeof(buffer), format, *value);
+        return SliderFloatImpl(label, value, vMin, vMax, buffer, options);
     }
 
     // =========================================================================
@@ -246,85 +333,35 @@ namespace GuiBase
     // =========================================================================
     bool GuiSliderInt(const char* label, int* value, int vMin, int vMax, const char* format)
     {
+        return GuiSliderIntEx(label, value, vMin, vMax, format, GuiSliderOptions());
+    }
+
+    bool GuiSliderIntEx(const char* label, int* value, int vMin, int vMax,
+                        const char* format, const GuiSliderOptions& options)
+    {
         float fValue = static_cast<float>(*value);
         char buffer[64];
         snprintf(buffer, sizeof(buffer), format, *value);
 
-        // 先按浮点路径执行拖拽交互
-        GuiThemeTokens tokens = Theme::Dark();
-        const float width = 220.0f;
-        const float height = 24.0f;
-        const float gap = tokens.spacing.compact;
-
-        ImGui::PushID(label);
-
-        std::string displayText = DisplayLabelText(label);
-        ImVec2 labelSize = displayText.empty() ? ImVec2(0.0f, 0.0f)
-                                               : ImGui::CalcTextSize(displayText.c_str());
-        ImVec2 valueSize = ImGui::CalcTextSize(buffer);
-
-        ImVec2 pos = ImGui::GetCursorScreenPos();
-        ImGui::InvisibleButton("##gui_slider_hit", ImVec2(width, height));
-        bool hovered = ImGui::IsItemHovered();
-        bool active = ImGui::IsItemActive();
-
-        float trackLeft = pos.x + labelSize.x + (labelSize.x > 0.0f ? gap : 0.0f);
-        float trackRight = pos.x + width - valueSize.x - (valueSize.x > 0.0f ? gap : 0.0f);
-        float trackWidth = std::max(40.0f, trackRight - trackLeft);
-
-        bool changed = false;
-        if (active)
+        // 浮点路径负责拖动 / 键盘；整数版本在结果上取整并统一触发 onChange
+        GuiSliderOptions local = options;
+        local.onChange = nullptr;
+        bool changed = SliderFloatImpl(label, &fValue, static_cast<float>(vMin),
+                                       static_cast<float>(vMax), buffer, local);
+        int newValue = static_cast<int>(std::lround(static_cast<double>(fValue)));
+        newValue = std::clamp(newValue, vMin, vMax);
+        if (newValue != *value)
         {
-            float t = (ImGui::GetIO().MousePos.x - trackLeft) / trackWidth;
-            t = std::clamp(t, 0.0f, 1.0f);
-            fValue = static_cast<float>(vMin) + t * static_cast<float>(vMax - vMin);
-            int newValue = static_cast<int>(std::lround(static_cast<double>(fValue)));
-            if (newValue != *value)
-            {
-                *value = newValue;
-                changed = true;
-            }
-        }
-
-        if (ImGui::IsItemDeactivated())
-        {
+            *value = newValue;
             changed = true;
         }
-
-        // 绘制轨道 / 填充 / 把手（与浮点版本一致的视觉）
-        const float trackH = std::max(tokens.spacing.tiny - tokens.spacing.hairline, height * 0.18f);
-        const float trackY = pos.y + (height - trackH) * 0.5f;
-        const float knobSize = std::max(tokens.typography.label, height * 0.72f);
-        const float knobRadius = knobSize * 0.5f;
-        const float range = (vMax > vMin) ? static_cast<float>(vMax - vMin) : 1.0f;
-        float ratio = std::clamp((static_cast<float>(*value) - static_cast<float>(vMin)) / range, 0.0f, 1.0f);
-        float knobCenterX = trackLeft + ratio * trackWidth;
-        knobCenterX = std::clamp(knobCenterX, trackLeft + knobRadius, trackLeft + trackWidth - knobRadius);
-
-        ImDrawList* drawList = ImGui::GetWindowDrawList();
-
-        GuiColor trackColor = hovered ? HoverColor(tokens, tokens.surfaceHover)
-                                      : tokens.surfaceHover;
-        drawList->AddRectFilled(ImVec2(trackLeft, trackY), ImVec2(trackLeft + trackWidth, trackY + trackH),
-                                trackColor.ToImU32(), trackH * 0.5f);
-        drawList->AddRectFilled(ImVec2(trackLeft, trackY), ImVec2(knobCenterX, trackY + trackH),
-                                tokens.primary.ToImU32(), trackH * 0.5f);
-
-        ImVec2 knobCenter(knobCenterX, pos.y + height * 0.5f);
-        drawList->AddCircleFilled(knobCenter, knobRadius, tokens.text.ToImU32(), 24);
-
-        if (!displayText.empty())
+        if (changed && options.onChange)
         {
-            ImVec2 textPos(pos.x, pos.y + (height - labelSize.y) * 0.5f);
-            drawList->AddText(textPos, tokens.text.ToImU32(), displayText.c_str());
+            options.onChange();
         }
-
-        ImVec2 valuePos(pos.x + width - valueSize.x, pos.y + (height - valueSize.y) * 0.5f);
-        drawList->AddText(valuePos, tokens.text.ToImU32(), buffer);
-
-        ImGui::PopID();
         return changed;
     }
+
 
     // =========================================================================
     // 开关（胶囊轨道 + 圆形滑块，带滑动动画）
@@ -396,46 +433,83 @@ namespace GuiBase
     // =========================================================================
     bool GuiCheckbox(const char* label, bool* value)
     {
+        return GuiCheckboxEx(label, value, GuiCheckboxOptions());
+    }
+
+    bool GuiCheckboxEx(const char* label, bool* value, const GuiCheckboxOptions& options)
+    {
         GuiThemeTokens tokens = Theme::Dark();
-        const float boxSize = 18.0f;
-        const float height = 26.0f;
+        const float fontSize = options.fontSize > 0.0f ? options.fontSize : tokens.typography.control;
+        const float boxSize = options.boxSize > 0.0f ? options.boxSize : tokens.control.indicator;
         const float gap = tokens.spacing.control;
+        const float height = std::max(boxSize, fontSize) + tokens.spacing.small;
         const float radius = tokens.radius.small;
+        const bool disabled = options.disabled;
 
         ImGui::PushID(label);
 
         std::string displayText = DisplayLabelText(label);
         ImVec2 textSize = ImGui::CalcTextSize(displayText.c_str());
-        float totalWidth = boxSize + gap + textSize.x;
+        float totalWidth = boxSize + (displayText.empty() ? 0.0f : gap + textSize.x);
+
+        // 选中程度动画（0 → 1），用于框色与对勾透明度
+        ImGuiID animId = ImGui::GetID("##gui_checkbox_anim");
+        float* anim = ImGui::GetStateStorage()->GetFloatRef(animId, *value ? 1.0f : 0.0f);
+        const float dt = std::clamp(ImGui::GetIO().DeltaTime, 0.0f, 0.1f);
+        const float speed = 1.0f / std::max(0.02f, options.transition.durationSeconds);
+        const float amount = options.transition.enabled ? (1.0f - std::exp(-speed * dt)) : 1.0f;
+        *anim += ((*value ? 1.0f : 0.0f) - *anim) * amount;
 
         ImVec2 pos = ImGui::GetCursorScreenPos();
-        bool clicked = ImGui::InvisibleButton("##gui_checkbox", ImVec2(totalWidth, height));
+        bool clicked = ImGui::InvisibleButton("##gui_checkbox", ImVec2(totalWidth, height),
+                                              ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_EnableNav);
         bool hovered = ImGui::IsItemHovered();
         bool active = ImGui::IsItemActive();
-        if (clicked)
+        if (clicked && !disabled)
         {
             *value = !*value;
+            if (options.onChange)
+            {
+                options.onChange(*value);
+            }
+        }
+
+        GuiColor boxColor = SliderOptionColor(options.boxColor, tokens.surface);
+        GuiColor checkedColor = SliderOptionColor(options.checkedColor, tokens.primary);
+        GuiColor markColor = SliderOptionColor(options.markColor, GuiColor(1.0f, 1.0f, 1.0f, 1.0f));
+        GuiColor textColor = SliderOptionColor(options.textColor, tokens.text);
+
+        const float animValue = std::clamp(*anim, 0.0f, 1.0f);
+        GuiColor fill = MixColor(boxColor, checkedColor, animValue);
+        if (disabled)
+        {
+            fill = WithAlpha(fill, fill.a * 0.45f);
+            textColor = WithAlpha(textColor, textColor.a * 0.45f);
+            markColor = WithAlpha(markColor, markColor.a * 0.45f);
+        }
+        else if (active)
+        {
+            fill = ActiveColor(tokens, fill);
+        }
+        else if (hovered)
+        {
+            fill = HoverColor(tokens, fill);
+        }
+        GuiColor borderColor = MixColor(WithAlpha(tokens.border, 0.70f), checkedColor, animValue);
+        if (disabled)
+        {
+            borderColor = WithAlpha(borderColor, borderColor.a * 0.45f);
         }
 
         ImDrawList* drawList = ImGui::GetWindowDrawList();
         ImVec2 boxPos(pos.x, pos.y + (height - boxSize) * 0.5f);
         ImVec2 boxMax(boxPos.x + boxSize, boxPos.y + boxSize);
+        drawList->AddRectFilled(boxPos, boxMax, fill.ToImU32(), radius);
+        drawList->AddRect(boxPos, boxMax, borderColor.ToImU32(), radius,
+                          ImDrawFlags_RoundCornersAll, 1.0f);
 
-        // 框体三态：选中为 primary，未选中为 surface，hover / active 变亮或变暗
-        GuiColor boxColor = *value ? tokens.primary : tokens.surface;
-        if (active)
-        {
-            boxColor = ActiveColor(tokens, boxColor);
-        }
-        else if (hovered)
-        {
-            boxColor = HoverColor(tokens, boxColor);
-        }
-        drawList->AddRectFilled(boxPos, boxMax, boxColor.ToImU32(), radius);
-        drawList->AddRect(boxPos, boxMax, WithAlpha(tokens.border, 0.70f).ToImU32(), radius, 1.0f, 0);
-
-        // 对勾（选中时绘制）：两条折线，几何移植自 EUI checkbox
-        if (*value)
+        // 对勾：几何移植自 EUI checkbox.h，透明度跟随动画
+        if (animValue > 0.01f)
         {
             const float thickness = std::max(2.0f, boxSize * 0.12f);
             const float angleCos = 0.7109f;
@@ -445,77 +519,104 @@ namespace GuiBase
             ImVec2 markStart(boxPos.x + boxSize * 0.26f, boxPos.y + boxSize * 0.55f);
             ImVec2 markCorner(markStart.x + shortLen * angleCos, markStart.y + shortLen * angleSin);
             ImVec2 markEnd(markCorner.x + longLen * angleCos, markCorner.y - longLen * angleSin);
-            ImU32 markColor = GuiColor(1.0f, 1.0f, 1.0f, 1.0f).ToImU32();
-            drawList->AddLine(markStart, markCorner, markColor, thickness);
-            drawList->AddLine(markCorner, markEnd, markColor, thickness);
+            const ImU32 mark = WithAlpha(markColor, markColor.a * animValue).ToImU32();
+            drawList->AddLine(markStart, markCorner, mark, thickness);
+            drawList->AddLine(markCorner, markEnd, mark, thickness);
         }
 
-        // label 文本
         if (!displayText.empty())
         {
             ImVec2 textPos(pos.x + boxSize + gap, pos.y + (height - textSize.y) * 0.5f);
-            drawList->AddText(textPos, tokens.text.ToImU32(), displayText.c_str());
+            drawList->AddText(textPos, textColor.ToImU32(), displayText.c_str());
         }
 
         ImGui::PopID();
-        return clicked;
+        return clicked && !disabled;
     }
 
-    // =========================================================================
-    // 单选（圆形外圈 + 选中实心圆点）
-    // =========================================================================
     bool GuiRadio(const char* label, bool* value)
     {
+        return GuiRadioEx(label, value, GuiRadioOptions());
+    }
+
+    bool GuiRadioEx(const char* label, bool* value, const GuiRadioOptions& options)
+    {
         GuiThemeTokens tokens = Theme::Dark();
-        const float outerSize = 18.0f;
-        const float height = 26.0f;
+        const float fontSize = options.fontSize > 0.0f ? options.fontSize : tokens.typography.control;
+        const float outerSize = options.dotSize > 0.0f ? options.dotSize : tokens.control.indicator;
         const float gap = tokens.spacing.control;
+        const float height = std::max(outerSize, fontSize) + tokens.spacing.small;
         const float innerSize = outerSize * 0.48f;
+        const bool disabled = options.disabled;
 
         ImGui::PushID(label);
 
         std::string displayText = DisplayLabelText(label);
         ImVec2 textSize = ImGui::CalcTextSize(displayText.c_str());
-        float totalWidth = outerSize + gap + textSize.x;
+        float totalWidth = outerSize + (displayText.empty() ? 0.0f : gap + textSize.x);
+
+        // 选中程度动画（外圈填充与内点大小）
+        ImGuiID animId = ImGui::GetID("##gui_radio_anim");
+        float* anim = ImGui::GetStateStorage()->GetFloatRef(animId, *value ? 1.0f : 0.0f);
+        const float dt = std::clamp(ImGui::GetIO().DeltaTime, 0.0f, 0.1f);
+        const float speed = 1.0f / std::max(0.02f, options.transition.durationSeconds);
+        const float amount = options.transition.enabled ? (1.0f - std::exp(-speed * dt)) : 1.0f;
+        *anim += ((*value ? 1.0f : 0.0f) - *anim) * amount;
 
         ImVec2 pos = ImGui::GetCursorScreenPos();
-        bool clicked = ImGui::InvisibleButton("##gui_radio", ImVec2(totalWidth, height));
+        bool clicked = ImGui::InvisibleButton("##gui_radio", ImVec2(totalWidth, height),
+                                              ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_EnableNav);
         bool hovered = ImGui::IsItemHovered();
-        if (clicked)
+        if (clicked && !disabled && !*value)
         {
             *value = true;
+            if (options.onChange)
+            {
+                options.onChange(true);
+            }
         }
+
+        GuiColor outerColor = SliderOptionColor(options.outerColor, tokens.surface);
+        GuiColor selectedColor = SliderOptionColor(options.selectedColor, tokens.primary);
+        GuiColor textColor = SliderOptionColor(options.textColor, tokens.text);
+        const float animValue = std::clamp(*anim, 0.0f, 1.0f);
+
+        GuiColor outerFill = MixColor(outerColor, WithAlpha(selectedColor, 0.18f), animValue);
+        if (disabled)
+        {
+            outerFill = WithAlpha(outerFill, outerFill.a * 0.45f);
+            selectedColor = WithAlpha(selectedColor, selectedColor.a * 0.45f);
+            textColor = WithAlpha(textColor, textColor.a * 0.45f);
+        }
+        else if (hovered && !*value)
+        {
+            outerFill = tokens.surfaceHover;
+        }
+        GuiColor outerBorder = MixColor(WithAlpha(tokens.border, 0.70f), selectedColor, animValue);
 
         ImDrawList* drawList = ImGui::GetWindowDrawList();
         ImVec2 center(pos.x + outerSize * 0.5f, pos.y + height * 0.5f);
         const float outerRadius = outerSize * 0.5f;
-
-        // 外圈：选中时淡 primary 填充 + primary 描边，未选中时 surface 填充 + border 描边
-        GuiColor outerFill = *value ? WithAlpha(tokens.primary, 0.18f) : tokens.surface;
-        if (hovered && !*value)
-        {
-            outerFill = tokens.surfaceHover;
-        }
-        GuiColor outerBorder = *value ? tokens.primary : tokens.border;
         drawList->AddCircleFilled(center, outerRadius, outerFill.ToImU32(), 24);
         drawList->AddCircle(center, outerRadius, outerBorder.ToImU32(), 24, 1.5f);
 
-        // 内圆点（选中时绘制）
-        if (*value)
+        if (animValue > 0.01f)
         {
-            drawList->AddCircleFilled(center, innerSize * 0.5f, tokens.primary.ToImU32(), 24);
+            const float innerRadius = innerSize * 0.5f * animValue;
+            drawList->AddCircleFilled(center, innerRadius,
+                                      WithAlpha(selectedColor, selectedColor.a * animValue).ToImU32(), 24);
         }
 
-        // label 文本
         if (!displayText.empty())
         {
             ImVec2 textPos(pos.x + outerSize + gap, pos.y + (height - textSize.y) * 0.5f);
-            drawList->AddText(textPos, tokens.text.ToImU32(), displayText.c_str());
+            drawList->AddText(textPos, textColor.ToImU32(), displayText.c_str());
         }
 
         ImGui::PopID();
-        return clicked;
+        return clicked && !disabled;
     }
+
 
     // =========================================================================
     // 分段控件（整条背景 + 选中段高亮，选中项变化时返回 true）

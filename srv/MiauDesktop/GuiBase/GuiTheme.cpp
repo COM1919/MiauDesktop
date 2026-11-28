@@ -149,4 +149,47 @@ namespace GuiBase
         shadow.color = field.popupShadowColor;
         return shadow;
     }
+
+    // =========================================================================
+    // 主题派生工具（对应 EUI theme.h 的 border / buttonBorder / shadow /
+    // resolveFieldFill）
+    // =========================================================================
+    GuiBorderStyle GuiThemeBorder(const GuiThemeTokens& tokens, float width, float opacity)
+    {
+        GuiBorderStyle border;
+        border.width = std::max(0.0f, width);
+        border.color = WithAlpha(tokens.border, tokens.border.a * std::clamp(opacity, 0.0f, 1.0f));
+        return border;
+    }
+
+    GuiBorderStyle GuiButtonBorder(const GuiThemeTokens& tokens, bool primary)
+    {
+        GuiBorderStyle border;
+        border.width = 1.0f;
+        border.color = primary ? WithAlpha(tokens.primary, 0.58f)
+                               : WithAlpha(tokens.border, tokens.border.a * 0.70f);
+        return border;
+    }
+
+    GuiColor GuiResolveFieldFill(const GuiThemeTokens& tokens, const GuiColor& baseColor,
+                                 float hoverAmount, float activeAmount)
+    {
+        const float hover = std::clamp(hoverAmount, 0.0f, 1.0f);
+        const float active = std::clamp(activeAmount, 0.0f, 1.0f);
+        const GuiColor base = (baseColor.a > 0.0f) ? baseColor : tokens.surface;
+        const GuiColor hoverColor = (baseColor.a > 0.0f)
+                                        ? MixColor(base, tokens.surfaceHover, 0.65f)
+                                        : tokens.surfaceHover;
+        return MixColor(MixColor(base, tokens.surfaceActive, active), hoverColor, hover);
+    }
+
+    GuiShadowStyle GuiButtonShadow(const GuiThemeTokens& tokens)
+    {
+        return GetShadowStyle(GuiShadowLevel::Button, tokens.isDark);
+    }
+
+    GuiShadowStyle GuiPanelShadow(const GuiThemeTokens& tokens)
+    {
+        return GetShadowStyle(GuiShadowLevel::Panel, tokens.isDark);
+    }
 }

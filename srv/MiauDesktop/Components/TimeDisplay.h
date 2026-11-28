@@ -29,6 +29,7 @@ public:
     int m_dateFormat = 0;           // 0: YYYY-MM-DD  1: YYYY/MM/DD  2: MM月DD日
     int m_alignment = 1;            // 0: 居左  1: 居中  2: 居右
     int m_timezoneOffset = 0;       // 在选定时间基础上平移的小时数
+    bool m_showAnalogClock = true;  // 在数字时间上方显示圆形模拟钟表
 
     TimeDisplay() : Component("时间显示", 0, true)
     {
@@ -51,6 +52,7 @@ public:
         config.AddItem("DateFormat", 0);
         config.AddItem("Alignment", 1);
         config.AddItem("TimezoneOffset", 0);
+        config.AddItem("ShowAnalogClock", true);
 
         UpdateWindowSize();
     }
@@ -73,6 +75,7 @@ public:
         m_dateFormat = std::clamp(config.Get<int>("DateFormat"), 0, 2);
         m_alignment = std::clamp(config.Get<int>("Alignment"), 0, 2);
         m_timezoneOffset = std::clamp(config.Get<int>("TimezoneOffset"), kMinTimezoneOffset, kMaxTimezoneOffset);
+        m_showAnalogClock = config.Get<bool>("ShowAnalogClock");
 
         // 字号 / 日期行 / 进度条共同决定窗口尺寸，配置变更后立即重新测量
         UpdateWindowSize();
@@ -92,6 +95,7 @@ public:
         config.Set("DateFormat", m_dateFormat);
         config.Set("Alignment", m_alignment);
         config.Set("TimezoneOffset", m_timezoneOffset);
+        config.Set("ShowAnalogClock", m_showAnalogClock);
     }
 
 protected:
@@ -128,6 +132,13 @@ protected:
                                    "开启后时间改用主题主色，默认使用高对比文字色"));
         items.push_back(MakeToggle("ShowProgress", "当天进度条", "外观", m_showProgress,
                                    "底部细条表示今天已过去的比例，鼠标悬停显示百分比"));
+        items.push_back(MakeToggle("ShowAnalogClock", "圆形钟表", "外观", m_showAnalogClock,
+                                   "在数字时间上方显示模拟表盘（时 / 分 / 秒针），与数字时间使用同一时区"));
+    }
+
+    void OnSettingsApplied() override
+    {
+        UpdateWindowSize();
     }
 
     void AfterBegin() override
@@ -185,6 +196,24 @@ protected:
         const float top = contentPos.y + std::max(0.0f, (contentAvail.y - totalHeight) * 0.5f);
         const float left = AlignedX(contentPos.x, contentAvail.x, blockWidth);
 
+        // 圆形钟表（可选）：与数字时间使用同一时间源 / 时区
+        float digitalTop = top;
+        if (m_showAnalogClock)
+        {
+            const float clockSize = AnalogClockSize();
+            const float clockX = AlignedX(contentPos.x, contentAvail.x, clockSize);
+            ImGui::SetCursorScreenPos(ImVec2(clockX, top));
+            GuiBase::GuiClockOptions clockOptions;
+            clockOptions.useLocalTime = !m_useUtc;
+            clockOptions.utcOffsetMinutes = m_timezoneOffset * 60;
+            clockOptions.use24Hour = m_format24Hour;
+            clockOptions.showSeconds = m_showSeconds;
+            clockOptions.showDigitalTime = false;
+            clockOptions.showDate = false;
+            GuiBase::GuiClock("##time_analog", ImVec2(clockSize, clockSize), clockOptions);
+            digitalTop = top + clockSize + kClockGap;
+        }
+
         // 冒号呼吸：闪烁帧只降低对比度，不隐藏、不改宽度
         const bool colonDim = m_blinkColon && (static_cast<int>(ImGui::GetTime() * 2.0) % 2 == 0);
         const ImU32 colonColor = GuiBase::WithAlpha(timeColor, colonDim ? 0.22f : 1.0f).ToImU32();
@@ -195,27 +224,27 @@ protected:
         const float periodAscent = AscentFor(font, periodFontSize);
 
         float cursorX = left;
-        drawList->AddText(font, static_cast<float>(m_fontSize), ImVec2(cursorX, top), timeU32, hourText.c_str());
+        drawList->AddText(font, static_cast<float>(m_fontSize), ImVec2(cursorX, digitalTop), timeU32, hourText.c_str());
         cursorX += hourWidth;
-        drawList->AddText(font, static_cast<float>(m_fontSize), ImVec2(cursorX, top), colonColor, ":");
+        drawList->AddText(font, static_cast<float>(m_fontSize), ImVec2(cursorX, digitalTop), colonColor, ":");
         cursorX += colonWidth;
-        drawList->AddText(font, static_cast<float>(m_fontSize), ImVec2(cursorX, top), timeU32, minuteText.c_str());
+        drawList->AddText(font, static_cast<float>(m_fontSize), ImVec2(cursorX, digitalTop), timeU32, minuteText.c_str());
         cursorX += minuteWidth;
 
         if (!secondText.empty())
         {
             cursorX += kSecondGap;
-            drawList->AddText(font, smallFontSize, ImVec2(cursorX, top + mainAscent - smallAscent), subColor, secondText.c_str());
+            drawList->AddText(font, smallFontSize, ImVec2(cursorX, digitalTop + mainAscent - smallAscent), subColor, secondText.c_str());
             cursorX += secondWidth;
         }
         if (!periodText.empty())
         {
             cursorX += kPeriodGap;
-            drawList->AddText(font, periodFontSize, ImVec2(cursorX, top + mainAscent - periodAscent), subColor, periodText.c_str());
+            drawList->AddText(font, periodFontSize, ImVec2(cursorX, digitalTop + mainAscent - periodAscent), subColor, periodText.c_str());
         }
 
         // ---- 日期行：次级文字，字号随主字号缩放 ----
-        float nextRowY = top + MainLineHeight();
+        float nextRowY = digitalTop + MainLineHeight();
         if (m_showDate && !dateText.empty())
         {
             const float dateTop = nextRowY + kDateGap;
@@ -256,6 +285,7 @@ private:
     static constexpr float kPeriodGap = 8.0f;
     static constexpr float kMinBarWidth = 96.0f;
     static constexpr float kMinBlockWidth = 48.0f;
+    static constexpr float kClockGap = 10.0f;
 
     // =========================================================================
     // 时间模型
@@ -398,9 +428,17 @@ private:
         return DateFontSize() * 1.5f;
     }
 
+    float AnalogClockSize() const
+    {
+        return std::clamp(static_cast<float>(m_fontSize) * 2.0f, 96.0f, 180.0f);
+    }
+
     float ContentHeight() const
     {
-        float height = MainLineHeight();
+        float height = 0.0f;
+        if (m_showAnalogClock)
+            height += AnalogClockSize() + kClockGap;
+        height += MainLineHeight();
         if (m_showDate)
             height += kDateGap + DateLineHeight();
         if (m_showProgress)
@@ -430,7 +468,7 @@ private:
 
     void UpdateWindowSize()
     {
-        const float contentWidth = std::max({ EstimateTimeWidth(), m_showDate ? EstimateDateWidth() : 0.0f,  m_showProgress ? kMinBarWidth : 0.0f, kMinBlockWidth });
+        const float contentWidth = std::max({ EstimateTimeWidth(), m_showDate ? EstimateDateWidth() : 0.0f, m_showProgress ? kMinBarWidth : 0.0f, kMinBlockWidth, m_showAnalogClock ? AnalogClockSize() : 0.0f });
         SetWindowSize(ImVec2(contentWidth + kPaddingX * 2.0f + 2.0f, ContentHeight() + kPaddingY * 2.0f + 2.0f));
     }
 

@@ -424,6 +424,92 @@ protected:
         }
 
         // =========================================================================
+        // 高级 UI（本轮补全）：Card / Progress / 图表 / 时钟 / 增强控件
+        // =========================================================================
+        ImGui::TextDisabled("高级 UI（GuiCard / GuiProgress / GuiBarChart / GuiLineChart / GuiPieChart / GuiClock）");
+
+        // Card 容器 + 进度条
+        {
+            GuiBase::GuiCardOptions cardOptions;
+            cardOptions.padding = 16.0f;
+            GuiBase::BeginGuiCard("##gallery_advanced_card", ImVec2(fullWidth, 0.0f), cardOptions);
+            ImGui::Text("GuiCard 容器（内容高度自适应）");
+            ImGui::TextDisabled("软阴影 + 圆角 + 内边距 + 尺寸 / 透明度过渡");
+            m_demoProgress = 0.5f + 0.45f * std::sin(static_cast<float>(ImGui::GetTime()) * 0.8f);
+            GuiBase::GuiProgressOptions progressOptions;
+            progressOptions.width = fullWidth - 32.0f; // Card padding 16 * 2
+            progressOptions.height = 16.0f;
+            progressOptions.showLabel = true;
+            GuiBase::GuiProgress("##gallery_advanced_progress", m_demoProgress, progressOptions);
+            GuiBase::EndGuiCard();
+        }
+
+        // 图表：柱状 + 折线并排，饼图独立
+        ImGui::TextDisabled("图表（hover 显示 tooltip，值变化带过渡）");
+        for (int index = 0; index < 7; ++index)
+        {
+            m_chartValues[index] = 0.5f + 0.35f * std::sin(
+                static_cast<float>(ImGui::GetTime()) * 0.6f + static_cast<float>(index) * 0.8f);
+        }
+        static const char* kChartLabels[] = { "一", "二", "三", "四", "五", "六", "日" };
+        GuiBase::GuiChartOptions chartOptions;
+        chartOptions.width = fullWidth * 0.5f - 6.0f;
+        chartOptions.height = 180.0f;
+        GuiBase::GuiBarChart("##gallery_advanced_bar", m_chartValues, 7, kChartLabels, "柱状图",
+                             GuiBase::GuiChartStyle(), chartOptions);
+        ImGui::SameLine();
+        GuiBase::GuiLineChart("##gallery_advanced_line", m_chartValues, 7, kChartLabels, "折线图",
+                              GuiBase::GuiLineStyle::Curve, GuiBase::GuiChartStyle(), chartOptions);
+
+        static const char* kPieLabels[] = { "桌面", "网页", "移动", "其他" };
+        static const float kPieValues[] = { 0.42f, 0.28f, 0.20f, 0.10f };
+        chartOptions.width = fullWidth;
+        chartOptions.height = 200.0f;
+        GuiBase::GuiPieChart("##gallery_advanced_pie", kPieValues, 4, kPieLabels,
+                             GuiBase::GuiChartStyle(), chartOptions);
+
+        // 时钟（模拟表盘 + 数字时间 + 日期）
+        ImGui::TextDisabled("时钟（模拟表盘 + 数字时间）");
+        GuiBase::GuiClockOptions clockOptions;
+        clockOptions.showSeconds = m_clockSeconds;
+        clockOptions.use24Hour = m_clock24h;
+        clockOptions.utcOffsetMinutes = m_clockOffset;
+        GuiBase::GuiClock("##gallery_advanced_clock", ImVec2(190.0f, 230.0f), clockOptions);
+        ImGui::SameLine();
+        ImGui::BeginGroup();
+        GuiBase::GuiCheckboxEx("24 小时制##gallery_clock_24", &m_clock24h,
+                               GuiBase::GuiCheckboxOptions());
+        GuiBase::GuiCheckboxEx("显示秒针##gallery_clock_sec", &m_clockSeconds,
+                               GuiBase::GuiCheckboxOptions());
+        GuiBase::GuiSliderInt("时区（分钟）##gallery_clock_tz", &m_clockOffset,
+                              -12 * 60, 14 * 60, "%d");
+        ImGui::EndGroup();
+
+        // 增强控件
+        ImGui::TextDisabled("增强控件（Dropdown / ColorPicker / DatePicker / Input / Slider / Checkbox / Radio）");
+        static const char* kDropdownItems[] = { "标准模式", "紧凑模式", "演示模式" };
+        GuiBase::GuiDropdownOptions dropdownOptions;
+        dropdownOptions.placeholder = "请选择模式";
+        GuiBase::GuiDropdownEx("##gallery_advanced_dropdown", kDropdownItems, 3,
+                               &m_demoDropdown, dropdownOptions);
+        GuiBase::GuiColorPickerEx("##gallery_advanced_color", m_demoColor);
+        GuiBase::GuiDatePickerEx("##gallery_advanced_date", &m_demoYear, &m_demoMonth, &m_demoDay);
+        {
+            GuiBase::GuiInputOptions inputOptions;
+            inputOptions.placeholder = "增强输入框（字号 / 内边距）";
+            inputOptions.fontSize = 15.0f;
+            inputOptions.inset = 10.0f;
+            GuiBase::GuiInputTextEx("##gallery_advanced_input", &m_demoInput,
+                                    ImVec2(260.0f, 0.0f), inputOptions);
+        }
+        GuiBase::GuiSliderIntEx("增强滑块##gallery_advanced_slider", &m_demoSliderValue,
+                                0, 100, "%d", GuiBase::GuiSliderOptions());
+        GuiBase::GuiCheckboxEx("复选（过渡动画）##gallery_advanced_check", &m_demoCheckbox,
+                               GuiBase::GuiCheckboxOptions());
+        GuiBase::GuiRadioEx("单选（过渡动画）##gallery_advanced_radio", &m_demoRadio,
+                            GuiBase::GuiRadioOptions());
+
+        // =========================================================================
         // 抽屉（最后绘制，保证处于最上层）
         // =========================================================================
         const ImVec2 savedCursor = ImGui::GetCursorScreenPos();
@@ -474,4 +560,20 @@ private:
     std::string m_lastDialogPath;
     std::vector<float> m_liveValues;
     double m_liveSampleTime = 0.0;
+
+    // 高级 UI 演示状态（Card / Progress / 图表 / 时钟 / 增强控件）
+    float m_demoProgress = 0.35f;
+    float m_chartValues[7] = { 0.42f, 0.68f, 0.51f, 0.86f, 0.64f, 0.73f, 0.58f };
+    float m_demoColor[4] = { 0.22f, 0.44f, 0.88f, 1.0f };
+    int m_demoYear = 2026;
+    int m_demoMonth = 11;
+    int m_demoDay = 28;
+    std::string m_demoInput = "EUI-NEO";
+    int m_demoDropdown = 0;
+    bool m_demoCheckbox = true;
+    bool m_demoRadio = false;
+    bool m_clock24h = true;
+    bool m_clockSeconds = true;
+    int m_clockOffset = 8 * 60;
+    int m_demoSliderValue = 42;
 };

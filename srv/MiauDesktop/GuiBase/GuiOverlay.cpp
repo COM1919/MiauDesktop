@@ -493,7 +493,11 @@ namespace GuiBase
         const bool hasIcon = !s_variant.icon.empty();
         const bool hasTitle = !s_variant.title.empty();
 
-        const float maxWidth = std::min(380.0f, io.DisplaySize.x - tokens.spacing.section * 2.0f);
+        const ImVec2 screen = (options.screen.x > 0.0f && options.screen.y > 0.0f)
+                                  ? options.screen : io.DisplaySize;
+        const float margin = std::max(0.0f, options.margin);
+        const float maxWidth = std::min(std::max(120.0f, options.width),
+                                        std::max(120.0f, screen.x - margin * 2.0f));
         const float reservedWidth = paddingX * 2.0f + closeSize + 8.0f + (hasIcon ? (iconSize + 10.0f) : 0.0f);
         const float wrapWidth = std::max(60.0f, maxWidth - reservedWidth);
 
@@ -505,20 +509,19 @@ namespace GuiBase
         const float textHeight = textExtent.y + (hasTitle ? (titleExtent.y + tokens.spacing.tiny) : 0.0f);
 
         const ImVec2 boxSize(std::min(maxWidth, textWidth + reservedWidth),
-                             textHeight + paddingY * 2.0f);
-        const ImVec2 pos(io.DisplaySize.x - boxSize.x - tokens.spacing.section,
-                         io.DisplaySize.y - boxSize.y - tokens.spacing.section);
+                             std::max(options.height, textHeight + paddingY * 2.0f));
+        const ImVec2 pos(screen.x - boxSize.x - margin, screen.y - boxSize.y - margin);
 
         // 淡入淡出
         float alpha = 1.0f;
-        const float fadeIn = 0.16f;
-        const float fadeOut = 0.24f;
-        if (elapsed < fadeIn)
+        const float fadeIn = std::max(0.0f, options.fadeInSeconds);
+        const float fadeOut = std::max(0.0f, options.fadeOutSeconds);
+        if (fadeIn > 0.0f && elapsed < fadeIn)
         {
             alpha = static_cast<float>(elapsed / fadeIn);
         }
         const float remaining = std::max(0.0f, duration - static_cast<float>(elapsed));
-        if (remaining < fadeOut)
+        if (fadeOut > 0.0f && remaining < fadeOut)
         {
             alpha = std::min(alpha, remaining / fadeOut);
         }

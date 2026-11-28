@@ -7,7 +7,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <ctime>
 #include <limits>
+#include <unordered_map>
 #include <vector>
 
 namespace GuiBase
@@ -529,5 +532,491 @@ namespace GuiBase
             drawList->AddRectFilled(pos, ImVec2(pos.x + fillWidth, pos.y + size.y),
                                     fillColor.ToImU32(), fillRounding, ImDrawFlags_RoundCornersAll);
         }
+    }
+
+    // =========================================================================
+    // 进度条控件（对应 EUI-NEO progress.h 的 ProgressBuilder）
+    // 轨道 + 填充 + 帧率无关的值过渡；width = 0 时取可用宽度
+    // =========================================================================
+    void GuiProgress(const char* label, float value, const GuiProgressOptions& options)
+    {
+        const GuiThemeTokens tokens = Theme::Dark();
+        ImGui::PushID(label != nullptr ? label : "##gui_progress");
+
+        const float width = options.width > 0.0f
+                                ? options.width
+                                : std::max(1.0f, ImGui::GetContentRegionAvail().x);
+        const float height = std::max(2.0f, options.height);
+        const ImVec2 pos = ImGui::GetCursorScreenPos();
+        const float target = std::clamp(value, 0.0f, 1.0f);
+
+        // 值过渡（EUI progress.h:70-77 的 transition）
+        const ImGuiID animId = ImGui::GetID("##progress_anim");
+        float* anim = ImGui::GetStateStorage()->GetFloatRef(animId, target);
+        const float dt = std::clamp(ImGui::GetIO().DeltaTime, 0.0f, 0.1f);
+        const float speed = 1.0f / std::max(0.02f, options.transition.durationSeconds);
+        const float amount = options.transition.enabled ? (1.0f - std::exp(-speed * dt)) : 1.0f;
+        *anim += (target - *anim) * amount;
+        if (std::fabs(target - *anim) < 0.001f)
+        {
+            *anim = target;
+        }
+
+        char labelText[16];
+        float labelWidth = 0.0f;
+        if (options.showLabel)
+        {
+            std::snprintf(labelText, sizeof(labelText), "%d%%",
+                          static_cast<int>(std::lround(*anim * 100.0f)));
+            labelWidth = ImGui::CalcTextSize(labelText).x + tokens.spacing.compact;
+        }
+        const float barWidth = std::max(1.0f, width - labelWidth);
+
+        const GuiColor trackColor = options.trackColor.a > 0.0f
+                                        ? options.trackColor : tokens.surfaceHover;
+        const GuiColor fillColor = options.fillColor.a > 0.0f
+                                       ? options.fillColor : tokens.primary;
+        const float radius = (options.radius >= 0.0f)
+                                 ? std::min(options.radius, height * 0.5f)
+                                 : height * 0.5f;
+
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        drawList->AddRectFilled(pos, ImVec2(pos.x + barWidth, pos.y + height),
+                                trackColor.ToImU32(), radius, ImDrawFlags_RoundCornersAll);
+
+        const float fillWidth = barWidth * std::clamp(*anim, 0.0f, 1.0f);
+        if (fillWidth > 0.0f)
+        {
+            const float fillRounding = std::min(radius, fillWidth * 0.5f);
+            drawList->AddRectFilled(pos, ImVec2(pos.x + fillWidth, pos.y + height),
+                                    fillColor.ToImU32(), fillRounding, ImDrawFlags_RoundCornersAll);
+        }
+
+        if (options.showLabel)
+        {
+            const ImVec2 textSize = ImGui::CalcTextSize(labelText);
+            drawList->AddText(ImVec2(pos.x + width - textSize.x,
+                                     pos.y + (height - textSize.y) * 0.5f),
+                              tokens.text.ToImU32(), labelText);
+        }
+
+        ImGui::Dummy(ImVec2(width, height));
+        ImGui::PopID();
+    }
+    namespace
+    {
+        struct GuiChartAnimState
+        {
+            std::vector<float> values;
+            bool initialized = false;
+        };
+
+        std::unordered_map<ImGuiID, GuiChartAnimState>& ChartAnimStates()
+        {
+            static std::unordered_map<ImGuiID, GuiChartAnimState>* states =
+                new std::unordered_map<ImGuiID, GuiChartAnimState>();
+            return *states;
+        }
+
+        // 图表值过渡：首帧直接采用目标值，后续按 GuiTransition 平滑
+        const std::vector<float>& AnimateChartValues(ImGuiID id, const float* values, int count,
+                                                     bool animate, const GuiTransition& transition)
+        {
+            GuiChartAnimState& state = ChartAnimStates()[id];
+            if (!state.initialized || static_cast<int>(state.values.size()) != count)
+            {
+                state.values.assign(values, values + count);
+                state.initialized = true;
+                return state.values;
+            }
+
+            if (animate && transition.enabled)
+            {
+                const float dt = std::clamp(ImGui::GetIO().DeltaTime, 0.0f, 0.1f);
+                const float speed = 1.0f / std::max(0.02f, transition.durationSeconds);
+                const float amount = 1.0f - std::exp(-speed * dt);
+                for (int index = 0; index < count; ++index)
+                {
+                    float& current = state.values[static_cast<std::size_t>(index)];
+                    current += (values[index] - current) * amount;
+                    if (std::fabs(values[index] - current) < 1e-4f)
+                    {
+                        current = values[index];
+                    }
+                }
+            }
+            else
+            {
+                for (int index = 0; index < count; ++index)
+                {
+                    state.values[static_cast<std::size_t>(index)] = values[index];
+                }
+            }
+            return state.values;
+        }
+
+        void ChartTooltipForValue(const char* const* labels, int index, float value, bool percent)
+        {
+            char text[96];
+            if (percent)
+            {
+                if (labels != nullptr && labels[index] != nullptr)
+                {
+                    std::snprintf(text, sizeof(text), "%s: %.1f%%", labels[index], value * 100.0f);
+                }
+                else
+                {
+                    std::snprintf(text, sizeof(text), "%.1f%%", value * 100.0f);
+                }
+            }
+            else
+            {
+                if (labels != nullptr && labels[index] != nullptr)
+                {
+                    std::snprintf(text, sizeof(text), "%s: %.2f", labels[index], value);
+                }
+                else
+                {
+                    std::snprintf(text, sizeof(text), "%.2f", value);
+                }
+            }
+            GuiTooltip(text);
+        }
+    }
+
+    void GuiBarChart(const char* label, const float* values, int count,
+                     const char* const* labels, const char* title,
+                     const GuiChartStyle& style, const GuiChartOptions& options)
+    {
+        if (values == nullptr || count <= 0)
+        {
+            return;
+        }
+
+        ImGui::PushID(label != nullptr ? label : "##gui_barchart");
+        const float width = options.width > 0.0f
+                                ? options.width
+                                : std::max(1.0f, ImGui::GetContentRegionAvail().x);
+        const float height = std::max(80.0f, options.height);
+        const ImVec2 pos = ImGui::GetCursorScreenPos();
+        const ImVec2 size(width, height);
+        const ImGuiID chartId = ImGui::GetID("##chart_values");
+
+        const std::vector<float>& animated =
+            AnimateChartValues(chartId, values, count, options.animate, options.transition);
+        DrawGuiBarChart(ImGui::GetWindowDrawList(), pos, size, animated.data(), count,
+                        labels, title, style);
+
+        ImGui::SetCursorScreenPos(pos);
+        ImGui::InvisibleButton("##chart_hit", size);
+        if (ImGui::IsItemHovered() && options.showTooltip)
+        {
+            const float plotX = 32.0f;
+            const float plotWidth = std::max(1.0f, size.x - 64.0f);
+            const float slotWidth = plotWidth / static_cast<float>(count);
+            const float localX = ImGui::GetIO().MousePos.x - (pos.x + plotX);
+            const int index = std::clamp(static_cast<int>(localX / slotWidth), 0, count - 1);
+            ChartTooltipForValue(labels, index, animated[static_cast<std::size_t>(index)], false);
+        }
+        ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + size.y));
+        ImGui::PopID();
+    }
+
+    void GuiLineChart(const char* label, const float* values, int count,
+                      const char* const* labels, const char* title,
+                      GuiLineStyle lineStyle, const GuiChartStyle& style,
+                      const GuiChartOptions& options)
+    {
+        if (values == nullptr || count <= 0)
+        {
+            return;
+        }
+
+        ImGui::PushID(label != nullptr ? label : "##gui_linechart");
+        const float width = options.width > 0.0f
+                                ? options.width
+                                : std::max(1.0f, ImGui::GetContentRegionAvail().x);
+        const float height = std::max(80.0f, options.height);
+        const ImVec2 pos = ImGui::GetCursorScreenPos();
+        const ImVec2 size(width, height);
+        const ImGuiID chartId = ImGui::GetID("##chart_values");
+
+        const std::vector<float>& animated =
+            AnimateChartValues(chartId, values, count, options.animate, options.transition);
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        DrawGuiLineChart(drawList, pos, size, animated.data(), count, title, style, lineStyle);
+
+        // X 轴标签（跳过过密项）
+        if (labels != nullptr)
+        {
+            ImFont* font = ImGui::GetFont();
+            const float plotX = 32.0f;
+            const float plotWidth = std::max(1.0f, size.x - 64.0f);
+            const int maxLabels = std::max(1, static_cast<int>(plotWidth / 56.0f));
+            const int stride = std::max(1, (count + maxLabels - 1) / maxLabels);
+            for (int index = 0; index < count; index += stride)
+            {
+                if (labels[index] == nullptr)
+                {
+                    continue;
+                }
+                const float t = (count > 1)
+                                    ? static_cast<float>(index) / static_cast<float>(count - 1)
+                                    : 0.5f;
+                const ImVec2 extent = font->CalcTextSizeA(style.labelFontSize, FLT_MAX, 0.0f, labels[index]);
+                drawList->AddText(font, style.labelFontSize,
+                                  ImVec2(pos.x + plotX + plotWidth * t - extent.x * 0.5f,
+                                         pos.y + size.y - 30.0f),
+                                  style.textColor.ToImU32(), labels[index]);
+            }
+        }
+
+        ImGui::SetCursorScreenPos(pos);
+        ImGui::InvisibleButton("##chart_hit", size);
+        if (ImGui::IsItemHovered() && options.showTooltip)
+        {
+            const float plotX = 32.0f;
+            const float plotWidth = std::max(1.0f, size.x - 64.0f);
+            const float step = (count > 1) ? plotWidth / static_cast<float>(count - 1) : 0.0f;
+            const float localX = ImGui::GetIO().MousePos.x - (pos.x + plotX);
+            const int index = (step > 0.0f)
+                                  ? std::clamp(static_cast<int>(std::lround(localX / step)), 0, count - 1)
+                                  : 0;
+            ChartTooltipForValue(labels, index, animated[static_cast<std::size_t>(index)], false);
+        }
+        ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + size.y));
+        ImGui::PopID();
+    }
+
+    void GuiPieChart(const char* label, const float* values, int count,
+                     const char* const* labels,
+                     const GuiChartStyle& style, const GuiChartOptions& options)
+    {
+        if (values == nullptr || count <= 0)
+        {
+            return;
+        }
+
+        ImGui::PushID(label != nullptr ? label : "##gui_piechart");
+        const float width = options.width > 0.0f
+                                ? options.width
+                                : std::max(1.0f, ImGui::GetContentRegionAvail().x);
+        const float height = std::max(80.0f, options.height);
+        const ImVec2 pos = ImGui::GetCursorScreenPos();
+        const ImVec2 size(width, height);
+        const ImGuiID chartId = ImGui::GetID("##chart_values");
+
+        const std::vector<float>& animated =
+            AnimateChartValues(chartId, values, count, options.animate, options.transition);
+        DrawGuiPieChart(ImGui::GetWindowDrawList(), pos, size, animated.data(), count, labels, style);
+
+        ImGui::SetCursorScreenPos(pos);
+        ImGui::InvisibleButton("##chart_hit", size);
+        if (ImGui::IsItemHovered() && options.showTooltip)
+        {
+            const ImGuiIO& io = ImGui::GetIO();
+            const float centerX = pos.x + size.x * 0.5f;
+            const float centerY = pos.y + size.y * 0.5f + 10.0f;
+            const float radius = std::min(size.x - 48.0f, size.y - 82.0f) * 0.5f;
+            const float dx = io.MousePos.x - centerX;
+            const float dy = io.MousePos.y - centerY;
+            if (radius > 0.0f && dx * dx + dy * dy <= radius * radius)
+            {
+                // 饼图从 -π/2 开始顺时针；转换为从顶部起算的 [0, 2π)
+                float angle = std::atan2(dy, dx) + kPi * 0.5f;
+                while (angle < 0.0f)
+                {
+                    angle += 2.0f * kPi;
+                }
+                while (angle >= 2.0f * kPi)
+                {
+                    angle -= 2.0f * kPi;
+                }
+
+                float total = 0.0f;
+                for (int index = 0; index < count; ++index)
+                {
+                    total += std::max(0.0f, animated[static_cast<std::size_t>(index)]);
+                }
+                if (total > 0.0f)
+                {
+                    float cumulative = 0.0f;
+                    for (int index = 0; index < count; ++index)
+                    {
+                        const float portion = std::max(0.0f, animated[static_cast<std::size_t>(index)]) / total;
+                        cumulative += portion * 2.0f * kPi;
+                        if (angle <= cumulative)
+                        {
+                            ChartTooltipForValue(labels, index, portion, true);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + size.y));
+        ImGui::PopID();
+    }
+
+    // =========================================================================
+    // 时钟控件（对应 EUI-NEO apps/clock 的模拟表盘 + 数字时间 + 日期）
+    // =========================================================================
+    void GuiClock(const char* label, const ImVec2& size, const GuiClockOptions& options)
+    {
+        GuiThemeTokens tokens = Theme::Dark();
+        ImGui::PushID(label != nullptr ? label : "##gui_clock");
+
+        const ImVec2 pos = ImGui::GetCursorScreenPos();
+        const float width = std::max(80.0f, size.x > 0.0f ? size.x : 180.0f);
+        const float height = std::max(120.0f, size.y > 0.0f ? size.y : 220.0f);
+        float reserved = 12.0f;
+        if (options.showDigitalTime)
+        {
+            reserved += 40.0f;
+        }
+        if (options.showDate)
+        {
+            reserved += 22.0f;
+        }
+        const float diameter = std::max(40.0f, std::min(width, height - reserved));
+        const float radius = diameter * 0.5f;
+        const ImVec2 center(pos.x + width * 0.5f, pos.y + radius + 6.0f);
+
+        const std::time_t now =
+            std::time(nullptr) + static_cast<std::time_t>(options.utcOffsetMinutes) * 60;
+        std::tm tm{};
+#ifdef _WIN32
+        if (options.useLocalTime)
+        {
+            localtime_s(&tm, &now);
+        }
+        else
+        {
+            gmtime_s(&tm, &now);
+        }
+#else
+        if (options.useLocalTime)
+        {
+            localtime_r(&now, &tm);
+        }
+        else
+        {
+            gmtime_r(&now, &tm);
+        }
+#endif
+
+        constexpr float kTwoPi = 6.28318530717958647692f;
+        const float secondAngle = -kPi * 0.5f + (static_cast<float>(tm.tm_sec) / 60.0f) * kTwoPi;
+        const float minuteAngle = -kPi * 0.5f +
+            ((static_cast<float>(tm.tm_min) + static_cast<float>(tm.tm_sec) / 60.0f) / 60.0f) * kTwoPi;
+        const int hour12 = tm.tm_hour % 12;
+        const float hourAngle = -kPi * 0.5f +
+            ((static_cast<float>(hour12) + static_cast<float>(tm.tm_min) / 60.0f) / 12.0f) * kTwoPi;
+
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        const GuiColor face = options.faceColor.a > 0.0f ? options.faceColor : tokens.surface;
+        const GuiColor tick = options.tickColor.a > 0.0f ? options.tickColor
+                                                         : WithAlpha(tokens.text, 0.32f);
+        const GuiColor hand = options.handColor.a > 0.0f ? options.handColor : tokens.text;
+        const GuiColor accent = options.accentColor.a > 0.0f ? options.accentColor : tokens.primary;
+        const GuiColor text = options.textColor.a > 0.0f ? options.textColor : tokens.text;
+
+        drawList->AddCircleFilled(center, radius, face.ToImU32(), 64);
+        drawList->AddCircle(center, radius,
+                            WithAlpha(tokens.border, tokens.isDark ? 0.70f : 0.55f).ToImU32(),
+                            64, 1.0f);
+
+        // 60 个刻度：每 5 个为主刻度
+        for (int index = 0; index < 60; ++index)
+        {
+            const float angle = -kPi * 0.5f + kTwoPi * static_cast<float>(index) / 60.0f;
+            const bool major = (index % 5 == 0);
+            const float inner = radius * (major ? 0.84f : 0.90f);
+            const float outer = radius * 0.95f;
+            drawList->AddLine(
+                ImVec2(center.x + std::cos(angle) * inner, center.y + std::sin(angle) * inner),
+                ImVec2(center.x + std::cos(angle) * outer, center.y + std::sin(angle) * outer),
+                major ? tick.ToImU32() : WithAlpha(tick, tick.a * 0.45f).ToImU32(),
+                major ? 2.0f : 1.0f);
+        }
+
+        // 12 / 3 / 6 / 9 数字
+        ImFont* font = ImGui::GetFont();
+        if (font != nullptr)
+        {
+            const float numeralSize = std::max(10.0f, radius * 0.16f);
+            for (int index = 0; index < 12; index += 3)
+            {
+                const float angle = -kPi * 0.5f + kTwoPi * static_cast<float>(index) / 12.0f;
+                char numeral[4];
+                std::snprintf(numeral, sizeof(numeral), "%d", index == 0 ? 12 : index);
+                const ImVec2 extent = font->CalcTextSizeA(numeralSize, FLT_MAX, 0.0f, numeral);
+                drawList->AddText(
+                    font, numeralSize,
+                    ImVec2(center.x + std::cos(angle) * radius * 0.70f - extent.x * 0.5f,
+                           center.y + std::sin(angle) * radius * 0.70f - extent.y * 0.5f),
+                    WithAlpha(text, 0.72f).ToImU32(), numeral);
+            }
+        }
+
+        // 时针 / 分针 / 秒针
+        auto drawHand = [&](float angle, float length, float thickness, ImU32 color)
+        {
+            drawList->AddLine(
+                center,
+                ImVec2(center.x + std::cos(angle) * length, center.y + std::sin(angle) * length),
+                color, thickness);
+        };
+        drawHand(hourAngle, radius * 0.48f, std::max(3.0f, radius * 0.055f), hand.ToImU32());
+        drawHand(minuteAngle, radius * 0.72f, std::max(2.0f, radius * 0.035f), hand.ToImU32());
+        if (options.showSeconds)
+        {
+            drawHand(secondAngle, radius * 0.84f, std::max(1.0f, radius * 0.018f), accent.ToImU32());
+            drawList->AddCircleFilled(
+                ImVec2(center.x + std::cos(secondAngle) * radius * 0.84f,
+                       center.y + std::sin(secondAngle) * radius * 0.84f),
+                std::max(2.0f, radius * 0.03f), accent.ToImU32(), 12);
+        }
+        drawList->AddCircleFilled(center, std::max(3.0f, radius * 0.045f), accent.ToImU32(), 16);
+
+        // 数字时间 + 日期（可分别关闭，TimeDisplay 只复用表盘时全部关闭）
+        const float timeFontSize = std::max(14.0f, radius * 0.28f);
+        const float timeY = center.y + radius + 10.0f;
+        if (options.showDigitalTime)
+        {
+            int displayHour = tm.tm_hour;
+            if (!options.use24Hour)
+            {
+                displayHour %= 12;
+                if (displayHour == 0)
+                {
+                    displayHour = 12;
+                }
+            }
+            char timeText[16];
+            std::snprintf(timeText, sizeof(timeText),
+                          options.use24Hour ? "%02d:%02d:%02d" : "%d:%02d:%02d",
+                          displayHour, tm.tm_min, tm.tm_sec);
+            const ImVec2 timeExtent = font->CalcTextSizeA(timeFontSize, FLT_MAX, 0.0f, timeText);
+            drawList->AddText(font, timeFontSize,
+                              ImVec2(center.x - timeExtent.x * 0.5f, timeY),
+                              text.ToImU32(), timeText);
+        }
+
+        if (options.showDate)
+        {
+            char dateText[32];
+            std::snprintf(dateText, sizeof(dateText), "%04d-%02d-%02d",
+                          tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday);
+            const float dateFontSize = std::max(10.0f, radius * 0.15f);
+            const ImVec2 dateExtent = font->CalcTextSizeA(dateFontSize, FLT_MAX, 0.0f, dateText);
+            const float dateY = options.showDigitalTime ? (timeY + timeFontSize + 2.0f) : timeY;
+            drawList->AddText(font, dateFontSize,
+                              ImVec2(center.x - dateExtent.x * 0.5f, dateY),
+                              WithAlpha(text, 0.62f).ToImU32(), dateText);
+        }
+
+        ImGui::Dummy(ImVec2(width, height));
+        ImGui::PopID();
     }
 }
