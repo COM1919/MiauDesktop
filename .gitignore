@@ -3,6 +3,7 @@
 x64/
 .trae/
 .reasonix/
+.codegraph/
 /MiauDesktop/
 
 reasonix.toml

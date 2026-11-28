@@ -1,1 +1,0 @@
-xerj --insecure --data-dir D:\\xerj-data
