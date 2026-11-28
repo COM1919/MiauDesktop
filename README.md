@@ -1,6 +1,6 @@
 <div align="center">
 
-<span style="font-size:2.4em;font-weight:bold;">MiauDesktop · 猫猫桌面</span>
+<h1 align="center" style="border-bottom:none"><strong> MiauDesktop · 猫猫桌面</strong></h1>
 
 **一个开源桌面组件项目，追求轻量、实用、美观、功能强大。**
 
